@@ -1,0 +1,33 @@
+# .github/workflows/beaver.yml
+name: Generate Knowledge Base with Beaver
+
+on:
+  push:
+    branches: [ main ]
+  issues:
+    types: [opened, edited, closed, reopened, labeled, unlabeled]
+  schedule:
+    - cron: '0 6 * * *'  # 毎日午前6時に実行
+  workflow_dispatch:  # 手動実行も可能
+
+jobs:
+  knowledge-base:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.beaver.outputs.site-url }}
+    
+    steps:
+      - name: Generate Beaver Knowledge Base
+        id: beaver
+        uses: nyasuto/beaver@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          codecov-token: ${{ secrets.CODECOV_API_TOKEN }}  
+          enable-quality-dashboard: true
+          deploy-to-pages: true
