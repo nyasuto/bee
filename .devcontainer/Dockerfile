@@ -36,6 +36,7 @@ RUN python3 -m pip install --upgrade pip \
     && pip3 install --no-cache-dir \
         torch==2.1.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu \
         tensorflow-macos==2.13.0 \
+        tensorflow-metal==1.0.1 \
         numpy==1.24.3 \
         scipy==1.11.1 \
         matplotlib==3.7.2 \
