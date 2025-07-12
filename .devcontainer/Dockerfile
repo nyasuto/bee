@@ -32,25 +32,18 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 FROM base AS development
 
 # Install Python dependencies for ML comparison and benchmarking
+# Note: Minimal setup for ARM64 Linux containers (TensorFlow not available)
 RUN python3 -m pip install --upgrade pip \
     && pip3 install --no-cache-dir \
-        torch==2.1.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu \
-        tensorflow-macos==2.13.0 \
-        tensorflow-metal==1.0.1 \
-        numpy==1.24.3 \
-        scipy==1.11.1 \
-        matplotlib==3.7.2 \
-        jupyter==1.0.0 \
-        memory-profiler==0.60.0 \
-        psutil==5.9.5 \
-        pandas==2.0.3 \
-        scikit-learn==1.3.0
+        numpy \
+        matplotlib \
+        jupyter \
+        memory-profiler \
+        psutil
 
 # Install Node.js tools for dashboard and visualization
 RUN npm install -g \
-    http-server \
-    live-server \
-    @mermaid-js/mermaid-cli
+    http-server
 
 # Setup cache directories
 RUN mkdir -p /home/vscode/.cache/go-build \
