@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  bee-dev-arm64:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile-arm64
+      target: development
+    platform: linux/arm64
+    volumes:
+      - ..:/workspace:cached
+      - cache-go-arm64:/home/vscode/.cache/go-build
+      - cache-go-mod-arm64:/home/vscode/go/pkg/mod
+    environment:
+      - GOPROXY=https://proxy.golang.org,direct
+      - GOSUMDB=sum.golang.org
+      - CGO_ENABLED=1
+      - GOPATH=/home/vscode/go
+      - PATH=/home/vscode/go/bin:$PATH
+      - ARCHITECTURE=arm64
+      - PLATFORM=darwin-arm64
+    working_dir: /workspace
+    command: sleep infinity
+    user: vscode
+    
+  # ホストマシンとの連携用サービス（必要時）
+  bee-host-ml:
+    image: python:3.11-slim
+    platform: linux/arm64
+    volumes:
+      - ..:/workspace:cached
+      - ./scripts/ml-bridge:/scripts:ro
+    environment:
+      - PYTHONPATH=/workspace
+    working_dir: /workspace
+    command: sleep infinity
+    profiles: ["ml-bridge"]
+
+volumes:
+  cache-go-arm64:
+  cache-go-mod-arm64:

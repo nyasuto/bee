@@ -1,7 +1,7 @@
 # Bee Neural Network Project Makefile
 # 段階的ニューラルネットワーク学習プロジェクト開発自動化
 
-.PHONY: help install dev build clean test lint format quality quality-fix validate analyze setup git-hooks env-info pr-ready setup-dev verify-setup docker-dev docker-gpu test-quick
+.PHONY: help install dev build clean test lint format quality quality-fix validate analyze setup git-hooks env-info pr-ready setup-dev verify-setup docker-dev docker-gpu test-quick setup-arm64 build-arm64 docker-arm64 verify-arm64
 
 # Default target
 .DEFAULT_GOAL := help
@@ -334,3 +334,46 @@ docker-clean: ## Dockerリソースをクリーンアップ
 	@echo "$(YELLOW)🧹 Docker環境クリーンアップ中...$(NC)"
 	@docker-compose -f .devcontainer/docker-compose.yml down --volumes --remove-orphans 2>/dev/null || true
 	@docker system prune -f
+
+# ARM64 Mac Specific Commands  
+setup-arm64: ## ARM64 Mac用開発環境セットアップ
+	@echo "$(PURPLE)🍎 ARM64 Mac開発環境セットアップ中...$(NC)"
+	@if [ -f scripts/setup/setup-arm64.sh ]; then \
+		bash scripts/setup/setup-arm64.sh; \
+	else \
+		echo "$(YELLOW)⚠️  scripts/setup/setup-arm64.sh が見つかりません。$(NC)"; \
+		$(MAKE) setup-dev; \
+	fi
+
+build-arm64: ## ARM64用ビルド
+	@echo "$(PURPLE)🍎 ARM64用ビルド中...$(NC)"
+	@mkdir -p bin
+	@if [ -f cmd/bee/main.go ]; then \
+		GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 go build \
+			-ldflags="-s -w" -o bin/bee-arm64 ./cmd/bee; \
+		echo "$(GREEN)✅ ARM64ビルド完了: bin/bee-arm64$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️  cmd/bee/main.go が見つかりません$(NC)"; \
+	fi
+
+docker-arm64: ## ARM64用DevContainer起動
+	@echo "$(PURPLE)🍎 ARM64 DevContainer起動中...$(NC)"
+	@if [ -f .devcontainer/docker-compose-arm64.yml ]; then \
+		cd .devcontainer && docker-compose -f docker-compose-arm64.yml up bee-dev-arm64; \
+	else \
+		echo "$(RED)❌ .devcontainer/docker-compose-arm64.yml が見つかりません$(NC)"; \
+	fi
+
+verify-arm64: ## ARM64環境検証
+	@echo "$(PURPLE)🍎 ARM64環境検証中...$(NC)"
+	@echo "Architecture: $$(uname -m)"
+	@echo "Platform: $$(uname -s)"
+	@if command -v go >/dev/null 2>&1; then \
+		echo "Go Version: $$(go version)"; \
+		echo "Go ARCH: $$(go env GOARCH)"; \
+	fi
+	@if [ -f scripts/verify/setup.go ]; then \
+		GOARCH=arm64 go run scripts/verify/setup.go; \
+	else \
+		$(MAKE) verify-setup; \
+	fi

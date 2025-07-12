@@ -1,0 +1,79 @@
+{
+  "name": "Bee Neural Network Development (ARM64 Optimized)",
+  "dockerComposeFile": "docker-compose-arm64.yml",
+  "service": "bee-dev-arm64",
+  "workspaceFolder": "/workspace",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.21"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    }
+  },
+  
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "ms-vscode.makefile-tools",
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "redhat.vscode-yaml",
+        "ms-vscode.vscode-json"
+      ],
+      "settings": {
+        "go.lintTool": "golangci-lint",
+        "go.formatTool": "goimports",
+        "go.testFlags": ["-v", "-race"],
+        "go.buildFlags": ["-race"],
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": true
+        },
+        "files.exclude": {
+          "**/bin": true,
+          "**/dist": true
+        },
+        "python.defaultInterpreterPath": "/usr/local/bin/python3"
+      }
+    }
+  },
+  
+  "postCreateCommand": "make setup-arm64",
+  "postStartCommand": "git config --global --add safe.directory /workspace",
+  
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  
+  "mounts": [
+    "source=${localWorkspaceFolder}/.devcontainer/cache,target=/home/vscode/.cache,type=bind,consistency=cached",
+    "source=bee-go-cache,target=/home/vscode/.cache/go-build,type=volume",
+    "source=bee-go-mod-cache,target=/home/vscode/go/pkg/mod,type=volume"
+  ],
+  
+  "containerEnv": {
+    "GOPROXY": "https://proxy.golang.org,direct",
+    "GOSUMDB": "sum.golang.org",
+    "CGO_ENABLED": "1",
+    "CLAUDE_PROJECT_TYPE": "neural-network",
+    "CLAUDE_LANGUAGE": "go",
+    "CLAUDE_LEARNING_MODE": "enabled",
+    "ARCHITECTURE": "arm64",
+    "PLATFORM": "darwin-arm64"
+  },
+  
+  "forwardPorts": [8080, 3000, 8888],
+  "portsAttributes": {
+    "8080": {
+      "label": "Bee API Server"
+    },
+    "3000": {
+      "label": "Dashboard"
+    },
+    "8888": {
+      "label": "Jupyter Notebook"
+    }
+  }
+}
