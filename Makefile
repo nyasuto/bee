@@ -1,7 +1,7 @@
 # Bee Neural Network Project Makefile
 # 段階的ニューラルネットワーク学習プロジェクト開発自動化
 
-.PHONY: help install dev build clean test lint format quality quality-fix validate analyze setup git-hooks env-info pr-ready setup-dev verify-setup docker-dev docker-gpu test-quick
+.PHONY: help install dev build clean test lint format quality quality-fix validate analyze setup git-hooks env-info pr-ready install-tools verify-env setup-native
 
 # Default target
 .DEFAULT_GOAL := help
@@ -33,7 +33,7 @@ setup: ## プロジェクト初期セットアップ (依存関係インスト�
 	@echo "$(CYAN)🐝 Bee プロジェクトをセットアップ中...$(NC)"
 	@$(MAKE) install
 	@$(MAKE) git-hooks
-	@echo "$(GREEN)✅ セットアップ完了! 'make dev' で開発を開始してください。$(NC)"
+	@echo "$(GREEN)✅ セットアップ完了! 'make setup-native' で開発ツールもインストールできます。$(NC)"
 
 install: ## Go依存関係をインストール
 	@echo "$(BLUE)📦 Go 依存関係をインストール中...$(NC)"
@@ -263,25 +263,6 @@ t: test ## Quick alias for test
 l: lint ## Quick alias for lint
 f: format ## Quick alias for format
 
-# DevContainer and Environment Setup
-setup-dev: ## DevContainer/開発環境用セットアップ (包括的)
-	@echo "$(CYAN)🐝 Bee開発環境セットアップ実行中...$(NC)"
-	@if [ -f scripts/setup/dev-setup.sh ]; then \
-		bash scripts/setup/dev-setup.sh; \
-	else \
-		echo "$(YELLOW)⚠️  scripts/setup/dev-setup.sh が見つかりません。基本セットアップを実行...$(NC)"; \
-		$(MAKE) setup; \
-	fi
-
-verify-setup: ## 開発環境設定を検証
-	@echo "$(BLUE)🔍 開発環境検証中...$(NC)"
-	@if [ -f scripts/verify/setup.go ]; then \
-		go run scripts/verify/setup.go; \
-	else \
-		echo "$(YELLOW)⚠️  verification script not found, running basic checks...$(NC)"; \
-		$(MAKE) env-info; \
-	fi
-
 install-tools: ## 開発ツールをインストール
 	@echo "$(BLUE)🔧 Go開発ツールインストール中...$(NC)"
 	@echo "golangci-lint をインストール中..."
@@ -292,45 +273,36 @@ install-tools: ## 開発ツールをインストール
 	@go install github.com/go-delve/delve/cmd/dlv@latest
 	@echo "$(GREEN)✅ 開発ツールインストール完了$(NC)"
 
-test-quick: ## 軽量テスト（基本動作確認）
-	@echo "$(BLUE)🧪 クイックテスト実行中...$(NC)"
-	@go version
+verify-env: ## 開発環境設定を検証
+	@echo "$(BLUE)🔍 ネイティブ開発環境検証中...$(NC)"
+	@echo "$(YELLOW)Go version:$(NC) $$(go version)"
+	@echo "$(YELLOW)Git version:$(NC) $$(git --version)"
+	@echo "$(YELLOW)Make version:$(NC) $$(make --version | head -1)"
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		echo "$(GREEN)✅ golangci-lint: $$(golangci-lint --version)$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️  golangci-lint not installed. Run 'make install-tools'$(NC)"; \
+	fi
+	@if command -v goimports >/dev/null 2>&1; then \
+		echo "$(GREEN)✅ goimports: available$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️  goimports not installed. Run 'make install-tools'$(NC)"; \
+	fi
 	@if [ -f go.mod ]; then \
 		go mod verify; \
-		echo "$(GREEN)✅ Go modules OK$(NC)"; \
-	fi
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		echo "$(GREEN)✅ golangci-lint OK$(NC)"; \
+		echo "$(GREEN)✅ Go modules verified$(NC)"; \
 	else \
-		echo "$(YELLOW)⚠️  golangci-lint not found$(NC)"; \
+		echo "$(YELLOW)⚠️  go.mod not found$(NC)"; \
 	fi
 
-# Docker/DevContainer Commands
-docker-dev: ## Docker開発環境を起動
-	@echo "$(CYAN)🐳 Docker開発環境起動中...$(NC)"
-	@if [ -f .devcontainer/docker-compose.yml ]; then \
-		cd .devcontainer && docker-compose up bee-dev; \
-	else \
-		echo "$(RED)❌ .devcontainer/docker-compose.yml が見つかりません$(NC)"; \
-	fi
-
-docker-gpu: ## GPU対応Docker環境を起動
-	@echo "$(CYAN)🚀 GPU対応Docker環境起動中...$(NC)"
-	@if [ -f .devcontainer/docker-compose.yml ]; then \
-		cd .devcontainer && docker-compose up bee-gpu; \
-	else \
-		echo "$(RED)❌ .devcontainer/docker-compose.yml が見つかりません$(NC)"; \
-	fi
-
-docker-build: ## DevContainerイメージをビルド
-	@echo "$(BLUE)🏗️  DevContainerイメージビルド中...$(NC)"
-	@if [ -f .devcontainer/Dockerfile ]; then \
-		docker build -f .devcontainer/Dockerfile -t bee-dev .; \
-	else \
-		echo "$(RED)❌ .devcontainer/Dockerfile が見つかりません$(NC)"; \
-	fi
-
-docker-clean: ## Dockerリソースをクリーンアップ
-	@echo "$(YELLOW)🧹 Docker環境クリーンアップ中...$(NC)"
-	@docker-compose -f .devcontainer/docker-compose.yml down --volumes --remove-orphans 2>/dev/null || true
-	@docker system prune -f
+setup-native: ## ネイティブ開発環境完全セットアップ
+	@echo "$(CYAN)🐝 Bee ネイティブ開発環境セットアップ中...$(NC)"
+	@$(MAKE) install
+	@$(MAKE) install-tools
+	@$(MAKE) git-hooks
+	@$(MAKE) verify-env
+	@echo "$(GREEN)✅ ネイティブ開発環境セットアップ完了!$(NC)"
+	@echo "$(BLUE)📋 次のステップ:$(NC)"
+	@echo "  1. 'make phase1' で Phase 1 開発環境準備"
+	@echo "  2. 'make dev' で開発開始"
+	@echo "  3. 'make quality' で品質チェック"
