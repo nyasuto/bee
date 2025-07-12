@@ -63,19 +63,13 @@ RUN echo 'alias ll="ls -la"' >> ~/.bashrc \
 # GPU development stage (extends development)
 FROM development AS gpu-development
 
-# Switch back to root for GPU dependencies
-USER root
-
-# Install CUDA development libraries (for GPU support)
-RUN apt-get update && apt-get install -y \
-        nvidia-cuda-dev \
-        nvidia-cuda-toolkit \
-    && apt-get autoremove -y && apt-get clean -y
-
-# Install PyTorch with CUDA support
+# Note: ARM64 Linux containers do not support NVIDIA CUDA
+# Using CPU-only libraries for cross-platform compatibility
 USER vscode
+
+# Install PyTorch CPU-only version for ARM64 compatibility
 RUN pip3 install --upgrade --no-cache-dir \
-    torch==2.1.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+    torch==2.1.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 # Production stage (minimal runtime)
 FROM golang:1.24-bullseye AS production
