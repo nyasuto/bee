@@ -6,7 +6,7 @@
   
   "features": {
     "ghcr.io/devcontainers/features/go:1": {
-      "version": "1.21"
+      "version": "1.24"
     },
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
     "ghcr.io/devcontainers/features/python:1": {
@@ -42,14 +42,16 @@
     }
   },
   
-  "postCreateCommand": "make setup-dev",
+  "postCreateCommand": "make install-tools && make setup-dev",
   "postStartCommand": "git config --global --add safe.directory /workspace",
   
   "remoteUser": "vscode",
   "updateRemoteUserUID": true,
   
   "mounts": [
-    "source=${localWorkspaceFolder}/.devcontainer/cache,target=/home/vscode/.cache,type=bind,consistency=cached"
+    "source=${localWorkspaceFolder}/.devcontainer/cache,target=/home/vscode/.cache,type=bind,consistency=cached",
+    "source=bee-go-cache,target=/home/vscode/.cache/go-build,type=volume",
+    "source=bee-go-mod-cache,target=/home/vscode/go/pkg/mod,type=volume"
   ],
   
   "containerEnv": {

@@ -1,5 +1,5 @@
-# Base development image with Go and system dependencies
-FROM mcr.microsoft.com/vscode/devcontainers/go:1.21-bullseye AS base
+# Base development image - Go will be installed via devcontainer.json features
+FROM mcr.microsoft.com/vscode/devcontainers/base:bullseye AS base
 
 # Install system dependencies for neural network development
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
@@ -26,12 +26,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
         unzip \
         && apt-get autoremove -y && apt-get clean -y
 
-# Install Go development tools
-RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest \
-    && go install golang.org/x/tools/cmd/goimports@latest \
-    && go install github.com/go-delve/delve/cmd/dlv@latest \
-    && go install golang.org/x/tools/gopls@latest \
-    && go install github.com/securecodewarrior/github-action-gosec@latest
+# Note: Go development tools will be installed via postCreateCommand after Go feature is installed
 
 # Development stage
 FROM base AS development
@@ -89,7 +84,7 @@ RUN pip3 install --upgrade --no-cache-dir \
     torch==2.1.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 # Production stage (minimal runtime)
-FROM mcr.microsoft.com/vscode/devcontainers/go:1.21-bullseye AS production
+FROM golang:1.24-bullseye AS production
 
 WORKDIR /app
 
