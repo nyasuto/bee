@@ -1,0 +1,80 @@
+#!/bin/sh
+# Bee プロジェクト品質チェックとブランチルールを強制
+
+set -e
+
+echo "🐝 Bee Pre-commit フック実行中..."
+
+# 現在のブランチ名を取得
+current_branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+
+# mainブランチへの直接コミット禁止
+if [ "$current_branch" = "main" ]; then
+    echo "❌ エラー: mainブランチへの直接コミットは禁止されています"
+    echo "   機能ブランチを作成してください:"
+    echo "   git checkout -b feat/phase1-perceptron"
+    echo "   git checkout -b fix/issue-X-description"
+    exit 1
+fi
+
+# ブランチ命名規則チェック（mainブランチ以外）
+if [ "$current_branch" != "main" ]; then
+    valid_patterns="^(feat|fix|hotfix|test|docs|ci|cicd|refactor|perf|security|deps|claude)/"
+    if ! echo "$current_branch" | grep -qE "$valid_patterns"; then
+        echo "❌ エラー: ブランチ名が命名規則に従っていません: $current_branch"
+        echo "   正しい形式 (Bee プロジェクト用):"
+        echo "   - feat/phase1-perceptron         (Phase 1実装)"
+        echo "   - feat/phase2-cnn               (Phase 2実装)"
+        echo "   - fix/issue-X-description       (バグ修正)"
+        echo "   - hotfix/X-description          (緊急修正)"
+        echo "   - test/X-description            (テスト)"
+        echo "   - docs/X-description            (ドキュメント)"
+        echo "   - ci/X-description              (CI/CD)"
+        echo "   - refactor/X-description        (リファクタリング)"
+        echo "   - perf/X-description           (性能改善)"
+        echo "   - security/X-description        (セキュリティ)"
+        echo "   - deps/X-description           (依存関係)"
+        echo "   - claude/X-description          (Claude Code作業)"
+        exit 1
+    fi
+fi
+
+# 空のコミットメッセージチェック
+if [ -z "$(git diff --cached --name-only)" ]; then
+    echo "❌ エラー: ステージされた変更がありません"
+    exit 1
+fi
+
+# 品質チェック実行
+echo "🔍 品質チェック実行中..."
+if command -v make >/dev/null 2>&1; then
+    make quality
+else
+    echo "⚠️  Makefileが見つかりません - 基本チェックのみ実行"
+    
+    # Go ファイルがある場合は基本チェック
+    if ls *.go >/dev/null 2>&1 || find . -name "*.go" -type f | grep -q .; then
+        echo "🔍 Go構文チェック..."
+        if command -v go >/dev/null 2>&1; then
+            go fmt ./...
+            go vet ./...
+            if command -v golint >/dev/null 2>&1; then
+                golint ./...
+            fi
+        else
+            echo "⚠️  Go toolchain が見つかりません"
+        fi
+    fi
+fi
+
+# Makefileの変更がある場合
+makefile_changed=$(git diff --cached --name-only | grep -E '^Makefile$' || true)
+if [ -n "$makefile_changed" ]; then
+    echo "🔧 Makefile構文チェック..."
+    if ! make -n help >/dev/null 2>&1; then
+        echo "❌ エラー: Makefile構文エラーがあります"
+        exit 1
+    fi
+fi
+
+echo "✅ Bee Pre-commit チェック完了"
