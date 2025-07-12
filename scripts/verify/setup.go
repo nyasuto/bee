@@ -19,10 +19,10 @@ type Check struct {
 
 // CheckResult represents the result of a verification check
 type CheckResult struct {
-	Check   Check
-	Passed  bool
-	Output  string
-	Error   error
+	Check  Check
+	Passed bool
+	Output string
+	Error  error
 }
 
 func main() {
@@ -208,7 +208,7 @@ func checkPythonLibraries() {
 
 func printEnvironmentInfo() {
 	fmt.Println("🌍 Environment Variables:")
-	
+
 	envVars := []string{
 		"GOPATH",
 		"GOPROXY",
