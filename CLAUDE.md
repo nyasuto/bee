@@ -157,16 +157,6 @@ func (nn *NeuralNet) sigmoid(x float64) float64 {
 }
 ```
 
-### Code Quality Requirements
-
-すべての関数は以下を含む必要があります：
-
-- **Package Documentation**: 各パッケージの目的と使用方法
-- **Function Documentation**: 関数の説明、パラメータ、戻り値
-- **Mathematical Background**: 実装する数式・アルゴリズムの説明
-- **Learning Rationale**: なぜこの実装方法を選んだかの学習観点
-- **Error Handling**: 適切なエラーハンドリングパターン
-- **Testing**: 単体テストとカバレッジ（数値的正確性確認含む）
 
 ### Go Code Style（学習重視パターン）
 ```go
