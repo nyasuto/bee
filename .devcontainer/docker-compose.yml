@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  bee-dev:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+      target: development
+    volumes:
+      - ..:/workspace:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+      - cache-go:/home/vscode/.cache/go-build
+      - cache-go-mod:/home/vscode/go/pkg/mod
+    environment:
+      - GOPROXY=https://proxy.golang.org,direct
+      - GOSUMDB=sum.golang.org
+      - CGO_ENABLED=1
+      - GOPATH=/home/vscode/go
+      - PATH=/home/vscode/go/bin:$PATH
+    working_dir: /workspace
+    command: sleep infinity
+    user: vscode
+    
+  bee-gpu:
+    extends: bee-dev
+    build:
+      target: gpu-development
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  cache-go:
+  cache-go-mod:
