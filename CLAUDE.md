@@ -100,57 +100,198 @@ make pr-ready      # Prepare for pull request
 
 ## 🔧 Development Guidelines
 
+### 🧠 学習重視実装方針
+
+**CRITICAL: ライブラリ依存を避け、アルゴリズム本質理解を最優先**
+
+#### ✅ 許可されるライブラリ使用
+```go
+// 基本的な数値演算のみ許可
+import "gonum.org/v1/gonum/mat"    // 線形代数基本操作
+import "gonum.org/v1/gonum/stat"  // 統計計算基本操作
+// 低レベル GPU binding（CUDA/OpenCL）
+```
+
+#### 🚫 禁止されるライブラリ使用
+```go
+// 高レベルMLライブラリは禁止
+// ❌ import "gorgonia.org/gorgonia"     // TensorFlow like
+// ❌ import "github.com/tensorflow/tfgo" // TensorFlow bindings  
+// ❌ PyTorch bindings
+// ❌ 完成されたニューラルネットワークフレームワーク
+```
+
+#### 🎯 段階的実装ルール
+
+1. **ナイーブ実装**: 最も理解しやすい直接実装を必ず最初に作成
+2. **最適化実装**: パフォーマンス改善（学習効果と両立）
+3. **ライブラリ比較**: 自実装 vs 標準ライブラリの定量比較
+4. **理論統合**: 数式→アルゴリズム→コード→テストの完全サイクル
+
+#### 💡 学習効果最大化パターン
+```go
+// ❌ Bad: ライブラリ丸投げ
+func (nn *NeuralNet) Forward(x mat.Matrix) mat.Matrix {
+    return someLibrary.Predict(x)  // 学習効果ゼロ
+}
+
+// ✅ Good: 段階的理解重視実装
+func (nn *NeuralNet) Forward(x []float64) []float64 {
+    // Step 1: 重み付き和計算（明示的実装）
+    weightedSum := 0.0
+    for i, weight := range nn.weights {
+        weightedSum += x[i] * weight  // 各計算を明示
+    }
+    
+    // Step 2: バイアス追加
+    weightedSum += nn.bias
+    
+    // Step 3: 活性化関数（自実装）
+    return nn.sigmoid(weightedSum)  // 関数内部も自実装
+}
+
+// 活性化関数の自実装例
+func (nn *NeuralNet) sigmoid(x float64) float64 {
+    // 数式: σ(x) = 1 / (1 + e^(-x))
+    return 1.0 / (1.0 + math.Exp(-x))
+}
+```
+
 ### Code Quality Requirements
 
 すべての関数は以下を含む必要があります：
 
 - **Package Documentation**: 各パッケージの目的と使用方法
 - **Function Documentation**: 関数の説明、パラメータ、戻り値
+- **Mathematical Background**: 実装する数式・アルゴリズムの説明
+- **Learning Rationale**: なぜこの実装方法を選んだかの学習観点
 - **Error Handling**: 適切なエラーハンドリングパターン
-- **Testing**: 単体テストとカバレッジ
+- **Testing**: 単体テストとカバレッジ（数値的正確性確認含む）
 
-### Go Code Style
+### Go Code Style（学習重視パターン）
 ```go
 // Package perceptron implements basic perceptron neural network
+// Mathematical Foundation: McCulloch-Pitts neuron model (1943)
+// Learning Goal: Understanding linear classification and weight updates
 package perceptron
 
 import (
     "errors"
     "fmt"
+    "math"
 )
 
 // Perceptron represents a basic perceptron neuron
+// Mathematical Model: y = σ(w·x + b) where σ is activation function
 type Perceptron struct {
-    weights []float64
-    bias    float64
-    learning_rate float64
+    weights      []float64  // synaptic weights (w)
+    bias         float64    // bias term (b)
+    learningRate float64    // learning rate (α)
 }
 
-// Train trains the perceptron with given input and expected output
-func (p *Perceptron) Train(inputs []float64, expected float64) error {
+// NewPerceptron creates a new perceptron with random weights
+// Learning Rationale: Understanding initialization strategies
+func NewPerceptron(inputSize int, learningRate float64) *Perceptron {
+    weights := make([]float64, inputSize)
+    // Xavier initialization for better convergence
+    for i := range weights {
+        weights[i] = (rand.Float64()*2 - 1) / math.Sqrt(float64(inputSize))
+    }
+    
+    return &Perceptron{
+        weights:      weights,
+        bias:         0.0,  // Start with zero bias
+        learningRate: learningRate,
+    }
+}
+
+// Forward performs forward propagation
+// Mathematical Foundation: y = σ(Σ(wi * xi) + b)
+// Learning Goal: Understanding weighted sum and activation
+func (p *Perceptron) Forward(inputs []float64) (float64, error) {
+    if len(inputs) != len(p.weights) {
+        return 0, errors.New("input size mismatch")
+    }
+    
+    // Step 1: Calculate weighted sum (明示的実装)
+    weightedSum := p.bias
+    for i, input := range inputs {
+        weightedSum += p.weights[i] * input
+    }
+    
+    // Step 2: Apply activation function (Heaviside step function)
+    // Mathematical: σ(x) = 1 if x ≥ 0, else 0
+    if weightedSum >= 0.0 {
+        return 1.0, nil
+    }
+    return 0.0, nil
+}
+
+// Train performs one training iteration using perceptron learning rule
+// Mathematical Foundation: Δw = α(t - y)x where t=target, y=output
+// Learning Goal: Understanding gradient-free weight updates
+func (p *Perceptron) Train(inputs []float64, target float64) error {
     if len(inputs) != len(p.weights) {
         return errors.New("input size mismatch")
     }
-    // Implementation
+    
+    // Step 1: Forward propagation
+    output, err := p.Forward(inputs)
+    if err != nil {
+        return err
+    }
+    
+    // Step 2: Calculate error
+    error := target - output
+    
+    // Step 3: Update weights (perceptron learning rule)
+    // Mathematical: wi = wi + α * error * xi
+    for i, input := range inputs {
+        p.weights[i] += p.learningRate * error * input
+    }
+    
+    // Step 4: Update bias
+    // Mathematical: b = b + α * error
+    p.bias += p.learningRate * error
+    
     return nil
 }
 ```
 
-### Development Workflow
+### 🎓 学習重視開発ワークフロー
 
-1. **Branch Creation**: 適切な命名規則でブランチ作成
-2. **Implementation**: Go のベストプラクティスに従って実装
-3. **Testing**: 包括的なテストコード作成
-4. **Quality Checks**: `make quality` で品質チェック
-5. **Documentation**: コードコメントとドキュメント更新
-6. **Pull Request Creation**: 必ずPR作成
+1. **理論理解**: 実装前に数式・アルゴリズムの数学的背景を理解
+2. **ナイーブ実装**: 最も理解しやすい直接実装から開始
+3. **テスト作成**: 数値的正確性確認を含む包括的テスト
+4. **性能測定**: ベースライン測定と最適化前後の比較
+5. **最適化実装**: 学習効果を維持しながら性能改善
+6. **ライブラリ比較**: 自実装 vs 標準ライブラリの定量評価
+7. **品質チェック**: `make quality` で品質確認
+8. **ドキュメント**: 学習観点と数学的背景を含む説明
+9. **Pull Request作成**: 必ずPR作成
 
-### Required for Every Implementation
+### 🧪 学習効果検証要件
 
-- **Documentation**: Go docコメントで説明
-- **Error Handling**: 適切なエラーハンドリング
-- **Testing**: テストカバレッジを保つ
-- **Benchmarking**: 性能測定コード
+実装ごとに以下を必ず含む：
+
+#### 必須実装要素
+- **Mathematical Foundation**: 実装する数式の詳細説明
+- **Step-by-Step Implementation**: 各計算ステップの明示的実装
+- **Learning Rationale**: 実装選択の学習観点説明
+- **Numerical Validation**: 既知解との数値比較テスト
+
+#### 必須テスト要素
+- **Unit Tests**: 各関数の動作確認
+- **Integration Tests**: アルゴリズム全体の動作確認
+- **Numerical Tests**: 数学的正確性の確認
+- **Performance Tests**: 実行時間・メモリ使用量測定
+- **Comparison Tests**: 他実装との結果比較
+
+#### 必須ドキュメント要素
+- **Algorithm Explanation**: アルゴリズムの動作原理
+- **Mathematical Derivation**: 数式の導出過程
+- **Implementation Notes**: 実装上の注意点・学習ポイント
+- **Performance Analysis**: 性能特性の分析
 
 ## 🏗 AI-First Design Principles
 
