@@ -1,7 +1,7 @@
 # Bee Neural Network Project Makefile
 # 段階的ニューラルネットワーク学習プロジェクト開発自動化
 
-.PHONY: help install dev build clean test lint format quality quality-fix validate analyze setup git-hooks env-info pr-ready
+.PHONY: help install dev build clean test lint format quality quality-fix validate analyze setup git-hooks env-info pr-ready setup-dev verify-setup docker-dev docker-gpu test-quick
 
 # Default target
 .DEFAULT_GOAL := help
@@ -262,3 +262,75 @@ b: build ## Quick alias for build
 t: test ## Quick alias for test
 l: lint ## Quick alias for lint
 f: format ## Quick alias for format
+
+# DevContainer and Environment Setup
+setup-dev: ## DevContainer/開発環境用セットアップ (包括的)
+	@echo "$(CYAN)🐝 Bee開発環境セットアップ実行中...$(NC)"
+	@if [ -f scripts/setup/dev-setup.sh ]; then \
+		bash scripts/setup/dev-setup.sh; \
+	else \
+		echo "$(YELLOW)⚠️  scripts/setup/dev-setup.sh が見つかりません。基本セットアップを実行...$(NC)"; \
+		$(MAKE) setup; \
+	fi
+
+verify-setup: ## 開発環境設定を検証
+	@echo "$(BLUE)🔍 開発環境検証中...$(NC)"
+	@if [ -f scripts/verify/setup.go ]; then \
+		go run scripts/verify/setup.go; \
+	else \
+		echo "$(YELLOW)⚠️  verification script not found, running basic checks...$(NC)"; \
+		$(MAKE) env-info; \
+	fi
+
+install-tools: ## 開発ツールをインストール
+	@echo "$(BLUE)🔧 Go開発ツールインストール中...$(NC)"
+	@echo "golangci-lint をインストール中..."
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@echo "goimports をインストール中..."
+	@go install golang.org/x/tools/cmd/goimports@latest
+	@echo "delve debugger をインストール中..."
+	@go install github.com/go-delve/delve/cmd/dlv@latest
+	@echo "$(GREEN)✅ 開発ツールインストール完了$(NC)"
+
+test-quick: ## 軽量テスト（基本動作確認）
+	@echo "$(BLUE)🧪 クイックテスト実行中...$(NC)"
+	@go version
+	@if [ -f go.mod ]; then \
+		go mod verify; \
+		echo "$(GREEN)✅ Go modules OK$(NC)"; \
+	fi
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		echo "$(GREEN)✅ golangci-lint OK$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️  golangci-lint not found$(NC)"; \
+	fi
+
+# Docker/DevContainer Commands
+docker-dev: ## Docker開発環境を起動
+	@echo "$(CYAN)🐳 Docker開発環境起動中...$(NC)"
+	@if [ -f .devcontainer/docker-compose.yml ]; then \
+		cd .devcontainer && docker-compose up bee-dev; \
+	else \
+		echo "$(RED)❌ .devcontainer/docker-compose.yml が見つかりません$(NC)"; \
+	fi
+
+docker-gpu: ## GPU対応Docker環境を起動
+	@echo "$(CYAN)🚀 GPU対応Docker環境起動中...$(NC)"
+	@if [ -f .devcontainer/docker-compose.yml ]; then \
+		cd .devcontainer && docker-compose up bee-gpu; \
+	else \
+		echo "$(RED)❌ .devcontainer/docker-compose.yml が見つかりません$(NC)"; \
+	fi
+
+docker-build: ## DevContainerイメージをビルド
+	@echo "$(BLUE)🏗️  DevContainerイメージビルド中...$(NC)"
+	@if [ -f .devcontainer/Dockerfile ]; then \
+		docker build -f .devcontainer/Dockerfile -t bee-dev .; \
+	else \
+		echo "$(RED)❌ .devcontainer/Dockerfile が見つかりません$(NC)"; \
+	fi
+
+docker-clean: ## Dockerリソースをクリーンアップ
+	@echo "$(YELLOW)🧹 Docker環境クリーンアップ中...$(NC)"
+	@docker-compose -f .devcontainer/docker-compose.yml down --volumes --remove-orphans 2>/dev/null || true
+	@docker system prune -f

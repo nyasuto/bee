@@ -1,0 +1,63 @@
+{
+  "name": "Bee Neural Network Development",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "bee-dev",
+  "workspaceFolder": "/workspace",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.21"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    }
+  },
+  
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "ms-vscode.makefile-tools",
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "redhat.vscode-yaml",
+        "ms-vscode.vscode-json",
+        "GitHub.copilot"
+      ],
+      "settings": {
+        "go.lintTool": "golangci-lint",
+        "go.formatTool": "goimports",
+        "go.testFlags": ["-v", "-race"],
+        "go.buildFlags": ["-race"],
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": true
+        },
+        "files.exclude": {
+          "**/bin": true,
+          "**/dist": true
+        }
+      }
+    }
+  },
+  
+  "postCreateCommand": "make setup-dev",
+  "postStartCommand": "git config --global --add safe.directory /workspace",
+  
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  
+  "mounts": [
+    "source=${localWorkspaceFolder}/.devcontainer/cache,target=/home/vscode/.cache,type=bind,consistency=cached"
+  ],
+  
+  "containerEnv": {
+    "GOPROXY": "https://proxy.golang.org,direct",
+    "GOSUMDB": "sum.golang.org",
+    "CGO_ENABLED": "1",
+    "CLAUDE_PROJECT_TYPE": "neural-network",
+    "CLAUDE_LANGUAGE": "go",
+    "CLAUDE_LEARNING_MODE": "enabled"
+  }
+}
