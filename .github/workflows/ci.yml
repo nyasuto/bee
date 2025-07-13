@@ -34,18 +34,18 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-quality-
           
-    - name: 🔧 Install tools
-      run: |
-        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-        
+
+    - name: 🔍 Lint & Security check
+      uses: golangci/golangci-lint-action@v8
+      with:
+        version: latest
+        args: --timeout=5m --verbose
+
+
     - name: 🧪 Run tests
       run: |
         go test -v -race -coverprofile=coverage.out ./...
-        
-    - name: 🔍 Run linting
-      run: |
-        golangci-lint run --timeout=5m
-        
+                
     - name: 💅 Check formatting
       run: |
         if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
@@ -54,14 +54,11 @@ jobs:
           exit 1
         fi
         
-    - name: 📊 Upload coverage to Codecov
-      if: success()
+    - name: 📊 Upload coverage
+      id: coverage
       uses: codecov/codecov-action@v5
       with:
-        file: ./coverage.out
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}        
         
     - name: 📊 Upload coverage artifact
       if: success()
