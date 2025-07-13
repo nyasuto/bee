@@ -39,11 +39,13 @@ func NewApp(args []string) *App {
 	// Create commands with dependency injection
 	trainCommand := commands.NewTrainCommand(dataLoader, dataValidator, modelManager, outputWriter)
 	timeSeriesCommand := commands.NewTimeSeriesCommand(outputWriter)
+	benchmarkCommand := commands.NewBenchmarkCommand(outputWriter)
 
 	// Create command map
 	commandMap := map[string]commands.Command{
 		"train":      trainCommand,
 		"timeseries": timeSeriesCommand,
+		"benchmark":  benchmarkCommand,
 		// TODO: Add other commands as they are implemented
 	}
 
