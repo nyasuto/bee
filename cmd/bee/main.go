@@ -66,6 +66,12 @@ func main() {
 			fmt.Fprintf(os.Stderr, "❌ Comparison failed: %v\n", err)
 			os.Exit(1)
 		}
+	case "mnist":
+		err := mnistCommand(config)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ MNIST demo failed: %v\n", err)
+			os.Exit(1)
+		}
 	case "help", "":
 		printUsage()
 	default:
@@ -128,6 +134,11 @@ func parseArgs() CLIConfig {
 		flagSet.IntVar(&config.Iterations, "iterations", 100, "Number of benchmark iterations")
 		flagSet.StringVar(&config.OutputPath, "output", "", "Output file for comparison results (JSON)")
 		flagSet.StringVar(&config.MLPHidden, "mlp-hidden", "4", "Hidden layer sizes for MLP (comma-separated)")
+		flagSet.BoolVar(&config.Verbose, "verbose", false, "Verbose output")
+
+	case "mnist":
+		flagSet = flag.NewFlagSet("mnist", flag.ExitOnError)
+		flagSet.StringVar(&config.DataPath, "data-dir", "datasets/mnist", "Directory for MNIST data")
 		flagSet.BoolVar(&config.Verbose, "verbose", false, "Verbose output")
 
 	default:
@@ -598,6 +609,17 @@ func compareCommand(config CLIConfig) error {
 	return nil
 }
 
+// mnistCommand implements the MNIST CNN demonstration functionality
+// Learning Goal: Understanding end-to-end CNN evaluation on real image data
+func mnistCommand(config CLIConfig) error {
+	if config.Verbose {
+		fmt.Printf("🐝 Bee MNIST CNN Demo\n")
+		fmt.Printf("📁 Data Directory: %s\n", config.DataPath)
+	}
+
+	return MNISTExample(config.DataPath, config.Verbose)
+}
+
 // Helper functions for benchmark commands
 
 // getDatasets returns datasets based on the specified type
@@ -671,6 +693,7 @@ Commands:
   test       Test a trained model on data
   benchmark  Run performance benchmarks
   compare    Compare model performance
+  mnist      MNIST CNN demonstration
   help       Show this help message
 
 Training:
@@ -711,6 +734,11 @@ Comparison:
     -output string    Output file for results (JSON)
     -verbose          Verbose output
 
+MNIST CNN Demo:
+  bee mnist [options]
+    -data-dir string  Directory for MNIST data (default "datasets/mnist")
+    -verbose          Verbose output
+
 Examples:
   # Train XOR perceptron
   bee train -data datasets/xor.csv -output models/xor.json -verbose
@@ -730,6 +758,9 @@ Examples:
 
   # Benchmark both models with custom iterations
   bee benchmark -model both -dataset xor -iterations 50
+
+  # MNIST CNN demonstration
+  bee mnist -verbose
 
 Data Format (CSV):
   # XOR dataset example
