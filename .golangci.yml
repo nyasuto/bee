@@ -1,0 +1,42 @@
+version: 2
+
+run:
+  tests: false
+
+linters:
+  enable:
+    - errcheck
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+
+settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  gosec:
+    excludes:
+      - G104
+      - G204
+  govet:
+    shadow:
+      strict: false
+  misspell:
+    locale: US
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+    # Exclude main.go from errcheck
+    - path: main\.go
+      linters:
+        - errcheck
+  max-issues-per-linter: 50
+  max-same-issues: 10

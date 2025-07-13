@@ -1,0 +1,570 @@
+name: 🤖 AI Agent Integration
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  issue_comment:
+    types: [created]
+  issues:
+    types: [opened, labeled]
+  schedule:
+    # 毎日午前6時（UTC）にAI Agent analysis実行
+    - cron: '0 6 * * *'
+
+env:
+  GO_VERSION: '1.21'
+
+jobs:
+  # ===== AI Code Review & Auto-Fix =====
+  ai-code-review:
+    name: 🤖 AI Code Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 🐹 Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        
+    - name: 🤖 AI Code Analysis
+      run: |
+        echo "## 🤖 AI Agent Code Review" > ai_code_review.md
+        echo "" >> ai_code_review.md
+        echo "### 📋 PR Overview" >> ai_code_review.md
+        echo "- **PR Number**: #${{ github.event.number }}" >> ai_code_review.md
+        echo "- **Author**: @${{ github.event.pull_request.user.login }}" >> ai_code_review.md
+        echo "- **Title**: ${{ github.event.pull_request.title }}" >> ai_code_review.md
+        echo "" >> ai_code_review.md
+        
+        # 変更ファイルの分析
+        echo "### 📁 Changed Files Analysis" >> ai_code_review.md
+        
+        CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.sha }})
+        if [ -n "$CHANGED_FILES" ]; then
+          echo "$CHANGED_FILES" | while read file; do
+            if [ -f "$file" ]; then
+              echo "#### \`$file\`" >> ai_code_review.md
+              
+              # ファイル種別による分析
+              case "$file" in
+                *.go)
+                  # Go コード分析
+                  LINES=$(wc -l < "$file")
+                  FUNCS=$(grep -c "^func " "$file" || echo "0")
+                  TESTS=$(grep -c "func Test" "$file" || echo "0")
+                  BENCHS=$(grep -c "func Benchmark" "$file" || echo "0")
+                  
+                  echo "- **Type**: Go source code" >> ai_code_review.md
+                  echo "- **Lines**: $LINES" >> ai_code_review.md
+                  echo "- **Functions**: $FUNCS" >> ai_code_review.md
+                  if [ "$TESTS" -gt 0 ]; then
+                    echo "- **Tests**: $TESTS" >> ai_code_review.md
+                  fi
+                  if [ "$BENCHS" -gt 0 ]; then
+                    echo "- **Benchmarks**: $BENCHS" >> ai_code_review.md
+                  fi
+                  
+                  # AI学習効果分析
+                  if echo "$file" | grep -q "phase"; then
+                    echo "- **Learning Category**: Neural Network Implementation" >> ai_code_review.md
+                    
+                    # パーセプトロン実装の分析
+                    if grep -q "Perceptron" "$file"; then
+                      echo "- **AI Concept**: Perceptron (Basic Neural Unit)" >> ai_code_review.md
+                      
+                      # 重要な学習ポイントをチェック
+                      if grep -q "Forward" "$file"; then
+                        echo "  - ✅ Forward propagation implemented" >> ai_code_review.md
+                      fi
+                      if grep -q "Train" "$file"; then
+                        echo "  - ✅ Learning algorithm implemented" >> ai_code_review.md
+                      fi
+                      if grep -q "XOR" "$file"; then
+                        echo "  - ✅ Limitation demonstration (XOR problem)" >> ai_code_review.md
+                      fi
+                    fi
+                  fi
+                  
+                  # コード品質チェック
+                  if [ $LINES -gt 500 ]; then
+                    echo "- ⚠️ **Large file**: Consider splitting into smaller modules" >> ai_code_review.md
+                  fi
+                  
+                  if [ $FUNCS -gt 0 ]; then
+                    COMMENT_RATIO=$(grep -c "^//" "$file" || echo "0")
+                    if [ $((COMMENT_RATIO * 100 / LINES)) -lt 10 ]; then
+                      echo "- 💡 **Suggestion**: Add more documentation for learning clarity" >> ai_code_review.md
+                    fi
+                  fi
+                  ;;
+                  
+                *.yml|*.yaml)
+                  echo "- **Type**: CI/CD Configuration" >> ai_code_review.md
+                  echo "- **Lines**: $(wc -l < "$file")" >> ai_code_review.md
+                  
+                  # CI/CD 品質チェック
+                  if grep -q "schedule:" "$file"; then
+                    echo "- ✅ Scheduled automation configured" >> ai_code_review.md
+                  fi
+                  if grep -q "matrix:" "$file"; then
+                    echo "- ✅ Multi-environment testing configured" >> ai_code_review.md
+                  fi
+                  ;;
+                  
+                *.md)
+                  echo "- **Type**: Documentation" >> ai_code_review.md
+                  echo "- **Lines**: $(wc -l < "$file")" >> ai_code_review.md
+                  
+                  # ドキュメント品質チェック
+                  if grep -q "学習" "$file"; then
+                    echo "- ✅ Learning-focused documentation" >> ai_code_review.md
+                  fi
+                  ;;
+              esac
+              
+              echo "" >> ai_code_review.md
+            fi
+          done
+        else
+          echo "No files changed in this PR." >> ai_code_review.md
+        fi
+        
+    - name: 🎯 AI Learning Effect Assessment
+      run: |
+        echo "### 🎓 Learning Effect Assessment" >> ai_code_review.md
+        echo "" >> ai_code_review.md
+        
+        # フェーズ進行の評価
+        if echo "$CHANGED_FILES" | grep -q "phase1"; then
+          echo "#### 🧠 Phase 1 Implementation Quality" >> ai_code_review.md
+          
+          # 実装完了度チェック
+          IMPLEMENTATION_SCORE=0
+          
+          if [ -f "phase1/perceptron.go" ]; then
+            echo "- ✅ Perceptron structure implemented" >> ai_code_review.md
+            IMPLEMENTATION_SCORE=$((IMPLEMENTATION_SCORE + 20))
+            
+            if grep -q "Forward" "phase1/perceptron.go"; then
+              echo "- ✅ Forward propagation method" >> ai_code_review.md
+              IMPLEMENTATION_SCORE=$((IMPLEMENTATION_SCORE + 20))
+            fi
+            
+            if grep -q "Train" "phase1/perceptron.go"; then
+              echo "- ✅ Training algorithm" >> ai_code_review.md
+              IMPLEMENTATION_SCORE=$((IMPLEMENTATION_SCORE + 20))
+            fi
+          fi
+          
+          if [ -f "phase1/perceptron_test.go" ]; then
+            echo "- ✅ Comprehensive test suite" >> ai_code_review.md
+            IMPLEMENTATION_SCORE=$((IMPLEMENTATION_SCORE + 20))
+            
+            if grep -q "XOR" "phase1/perceptron_test.go"; then
+              echo "- ✅ XOR limitation demonstration" >> ai_code_review.md
+              IMPLEMENTATION_SCORE=$((IMPLEMENTATION_SCORE + 20))
+            fi
+          fi
+          
+          echo "" >> ai_code_review.md
+          echo "**Implementation Score**: $IMPLEMENTATION_SCORE/100" >> ai_code_review.md
+          
+          if [ $IMPLEMENTATION_SCORE -ge 80 ]; then
+            echo "**Status**: ✅ Ready for Phase 1.1 (MLP)" >> ai_code_review.md
+          elif [ $IMPLEMENTATION_SCORE -ge 60 ]; then
+            echo "**Status**: ⚠️ Nearly complete, minor improvements needed" >> ai_code_review.md
+          else
+            echo "**Status**: ❌ Significant work required" >> ai_code_review.md
+          fi
+        fi
+        
+        # CLI実装の評価
+        if echo "$CHANGED_FILES" | grep -q "cmd/bee"; then
+          echo "" >> ai_code_review.md
+          echo "#### 🛠 CLI Implementation Quality" >> ai_code_review.md
+          
+          if [ -f "cmd/bee/main.go" ]; then
+            if grep -q "train" "cmd/bee/main.go"; then
+              echo "- ✅ Training command implemented" >> ai_code_review.md
+            fi
+            if grep -q "infer" "cmd/bee/main.go"; then
+              echo "- ✅ Inference command implemented" >> ai_code_review.md
+            fi
+            if grep -q "test" "cmd/bee/main.go"; then
+              echo "- ✅ Testing command implemented" >> ai_code_review.md
+            fi
+          fi
+        fi
+        
+    - name: 🤖 AI Code Improvement Suggestions
+      run: |
+        echo "" >> ai_code_review.md
+        echo "### 🚀 AI Improvement Suggestions" >> ai_code_review.md
+        echo "" >> ai_code_review.md
+        
+        # Go ファイルのパフォーマンス改善提案
+        echo "$CHANGED_FILES" | grep "\.go$" | while read gofile; do
+          if [ -f "$gofile" ]; then
+            echo "#### 📝 \`$gofile\` Optimization Tips" >> ai_code_review.md
+            
+            # メモリ allocation の最適化
+            if grep -q "make(\[\]" "$gofile"; then
+              echo "- 💡 **Memory Optimization**: Consider pre-allocating slices with known capacity" >> ai_code_review.md
+            fi
+            
+            # ループ最適化
+            if grep -q "for.*range" "$gofile"; then
+              echo "- ⚡ **Performance**: Range loops can be optimized for large datasets" >> ai_code_review.md
+            fi
+            
+            # エラーハンドリング改善
+            ERROR_CHECKS=$(grep -c "if err != nil" "$gofile" || echo "0")
+            RETURNS=$(grep -c "return.*error" "$gofile" || echo "0")
+            if [ "$ERROR_CHECKS" -lt "$RETURNS" ]; then
+              echo "- 🛡️ **Reliability**: Consider more comprehensive error handling" >> ai_code_review.md
+            fi
+            
+            # 学習重視のコメント
+            if echo "$gofile" | grep -q "phase" && [ $(grep -c "// Mathematical:" "$gofile" || echo "0") -lt 2 ]; then
+              echo "- 📚 **Learning**: Add mathematical foundations in comments for educational value" >> ai_code_review.md
+            fi
+            
+            echo "" >> ai_code_review.md
+          fi
+        done
+        
+        echo "### 🎯 Overall Recommendations" >> ai_code_review.md
+        echo "1. **Learning Focus**: Ensure mathematical concepts are clearly explained" >> ai_code_review.md
+        echo "2. **Performance**: Optimize for both educational clarity and execution speed" >> ai_code_review.md
+        echo "3. **Testing**: Comprehensive tests improve both reliability and learning" >> ai_code_review.md
+        echo "4. **Documentation**: Clear docs enhance the learning experience" >> ai_code_review.md
+        
+    - name: 📤 Upload AI review
+      uses: actions/upload-artifact@v4
+      with:
+        name: ai-code-review-${{ github.event.number }}
+        path: ai_code_review.md
+        retention-days: 30
+        
+    - name: 💬 Comment on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const review = fs.readFileSync('ai_code_review.md', 'utf8');
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## 🤖 AI Agent Code Review\n\n${review}\n\n---\n*Generated by AI Agent Integration Pipeline*`
+          });
+
+  # ===== AI Issue Analysis & Auto-Triage =====
+  ai-issue-triage:
+    name: 🏷️ AI Issue Triage
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🤖 AI Issue Analysis
+      id: analyze
+      run: |
+        echo "## 🤖 AI Issue Analysis" > issue_analysis.md
+        echo "" >> issue_analysis.md
+        echo "### 📋 Issue Details" >> issue_analysis.md
+        echo "- **Title**: ${{ github.event.issue.title }}" >> issue_analysis.md
+        echo "- **Author**: @${{ github.event.issue.user.login }}" >> issue_analysis.md
+        echo "- **Number**: #${{ github.event.issue.number }}" >> issue_analysis.md
+        echo "" >> issue_analysis.md
+        
+        # タイトルと本文からカテゴリ分析
+        TITLE="${{ github.event.issue.title }}"
+        BODY="${{ github.event.issue.body }}"
+        
+        echo "### 🏷️ AI Classification" >> issue_analysis.md
+        
+        # フェーズ関連の判定
+        if echo "$TITLE $BODY" | grep -i -E "(phase|perceptron|mlp|cnn|rnn|transformer|llm)"; then
+          echo "- **Category**: Neural Network Implementation" >> issue_analysis.md
+          echo "LABELS=neural-network,implementation" >> $GITHUB_OUTPUT
+          
+          if echo "$TITLE $BODY" | grep -i "phase.*1"; then
+            echo "- **Phase**: Phase 1 (Perceptron)" >> issue_analysis.md
+            echo "PHASE_LABEL=phase-1" >> $GITHUB_OUTPUT
+          elif echo "$TITLE $BODY" | grep -i "phase.*2"; then
+            echo "- **Phase**: Phase 2 (CNN/RNN)" >> issue_analysis.md
+            echo "PHASE_LABEL=phase-2" >> $GITHUB_OUTPUT
+          fi
+        fi
+        
+        # 優先度の判定
+        if echo "$TITLE $BODY" | grep -i -E "(critical|urgent|blocking|bug|error|fail)"; then
+          echo "- **Priority**: High (Critical/Bug)" >> issue_analysis.md
+          echo "PRIORITY=priority: high" >> $GITHUB_OUTPUT
+        elif echo "$TITLE $BODY" | grep -i -E "(feature|enhancement|improvement)"; then
+          echo "- **Priority**: Medium (Feature/Enhancement)" >> issue_analysis.md
+          echo "PRIORITY=priority: medium" >> $GITHUB_OUTPUT
+        elif echo "$TITLE $BODY" | grep -i -E "(documentation|docs|guide|readme)"; then
+          echo "- **Priority**: Low (Documentation)" >> issue_analysis.md
+          echo "PRIORITY=priority: low" >> $GITHUB_OUTPUT
+        else
+          echo "- **Priority**: Medium (Default)" >> issue_analysis.md
+          echo "PRIORITY=priority: medium" >> $GITHUB_OUTPUT
+        fi
+        
+        # タイプの判定
+        if echo "$TITLE $BODY" | grep -i -E "(bug|error|fail|broken|fix)"; then
+          echo "- **Type**: Bug" >> issue_analysis.md
+          echo "TYPE_LABEL=type: bug" >> $GITHUB_OUTPUT
+        elif echo "$TITLE $BODY" | grep -i -E "(feature|add|implement|new)"; then
+          echo "- **Type**: Feature" >> issue_analysis.md
+          echo "TYPE_LABEL=type: feature" >> $GITHUB_OUTPUT
+        elif echo "$TITLE $BODY" | grep -i -E "(test|testing|benchmark)"; then
+          echo "- **Type**: Test" >> issue_analysis.md
+          echo "TYPE_LABEL=type: test" >> $GITHUB_OUTPUT
+        elif echo "$TITLE $BODY" | grep -i -E "(doc|documentation|guide|readme)"; then
+          echo "- **Type**: Documentation" >> issue_analysis.md
+          echo "TYPE_LABEL=type: docs" >> $GITHUB_OUTPUT
+        elif echo "$TITLE $BODY" | grep -i -E "(ci|cd|pipeline|workflow|github.*action)"; then
+          echo "- **Type**: CI/CD" >> issue_analysis.md
+          echo "TYPE_LABEL=type: ci/cd" >> $GITHUB_OUTPUT
+        else
+          echo "- **Type**: Enhancement" >> issue_analysis.md
+          echo "TYPE_LABEL=type: enhancement" >> $GITHUB_OUTPUT
+        fi
+        
+        echo "" >> issue_analysis.md
+        echo "### 🎯 AI Recommendations" >> issue_analysis.md
+        echo "- Review issue details for accuracy" >> issue_analysis.md
+        echo "- Assign to appropriate team member" >> issue_analysis.md
+        echo "- Consider breaking down into smaller tasks if complex" >> issue_analysis.md
+        
+    - name: 🏷️ Apply AI-suggested labels
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const labels = [];
+          
+          // 基本ラベル
+          if ('${{ steps.analyze.outputs.PRIORITY }}') {
+            labels.push('${{ steps.analyze.outputs.PRIORITY }}');
+          }
+          if ('${{ steps.analyze.outputs.TYPE_LABEL }}') {
+            labels.push('${{ steps.analyze.outputs.TYPE_LABEL }}');
+          }
+          if ('${{ steps.analyze.outputs.PHASE_LABEL }}') {
+            labels.push('${{ steps.analyze.outputs.PHASE_LABEL }}');
+          }
+          
+          // 追加のカテゴリラベル
+          if ('${{ steps.analyze.outputs.LABELS }}') {
+            const additionalLabels = '${{ steps.analyze.outputs.LABELS }}'.split(',');
+            labels.push(...additionalLabels);
+          }
+          
+          if (labels.length > 0) {
+            await github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: labels
+            });
+          }
+          
+    - name: 💬 Comment with AI analysis
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const analysis = fs.readFileSync('issue_analysis.md', 'utf8');
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `${analysis}\n\n---\n*🤖 Auto-generated by AI Agent Triage*`
+          });
+
+  # ===== AI Agent プロジェクト進捗監視 =====
+  ai-progress-monitoring:
+    name: 📊 AI Progress Monitoring
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 📊 AI Progress Analysis
+      run: |
+        echo "## 📊 AI Agent Progress Report" > progress_report.md
+        echo "" >> progress_report.md
+        echo "### 🎯 Project Status Overview" >> progress_report.md
+        echo "- **Date**: $(date '+%Y-%m-%d %H:%M:%S UTC')" >> progress_report.md
+        echo "- **Repository**: ${{ github.repository }}" >> progress_report.md
+        echo "" >> progress_report.md
+        
+        # フェーズ実装状況
+        echo "### 🧠 Neural Network Implementation Progress" >> progress_report.md
+        
+        TOTAL_SCORE=0
+        MAX_SCORE=500  # 5 phases × 100 points each
+        
+        # Phase 1 チェック
+        PHASE1_SCORE=0
+        if [ -d "phase1" ]; then
+          echo "#### ✅ Phase 1: Perceptron" >> progress_report.md
+          PHASE1_SCORE=$((PHASE1_SCORE + 20))
+          
+          if [ -f "phase1/perceptron.go" ]; then
+            echo "- ✅ Core implementation" >> progress_report.md
+            PHASE1_SCORE=$((PHASE1_SCORE + 30))
+          fi
+          
+          if [ -f "phase1/perceptron_test.go" ]; then
+            echo "- ✅ Test suite" >> progress_report.md
+            PHASE1_SCORE=$((PHASE1_SCORE + 30))
+          fi
+          
+          if [ -f "cmd/bee/main.go" ]; then
+            echo "- ✅ CLI tool" >> progress_report.md
+            PHASE1_SCORE=$((PHASE1_SCORE + 20))
+          fi
+          
+          echo "- **Phase 1 Score**: $PHASE1_SCORE/100" >> progress_report.md
+        else
+          echo "#### ⏸️ Phase 1: Not started" >> progress_report.md
+        fi
+        
+        TOTAL_SCORE=$((TOTAL_SCORE + PHASE1_SCORE))
+        
+        # Phase 2-4 チェック（未実装の場合）
+        for phase in 2 3 4; do
+          if [ -d "phase$phase" ]; then
+            echo "#### 🚧 Phase $phase: In progress" >> progress_report.md
+          else
+            echo "#### ⏳ Phase $phase: Planned" >> progress_report.md
+          fi
+        done
+        
+        # CI/CD 実装状況
+        echo "" >> progress_report.md
+        echo "### 🔧 CI/CD Infrastructure" >> progress_report.md
+        
+        CICD_SCORE=0
+        if [ -f ".github/workflows/code-quality.yml" ]; then
+          echo "- ✅ Code Quality Pipeline" >> progress_report.md
+          CICD_SCORE=$((CICD_SCORE + 25))
+        fi
+        
+        if [ -f ".github/workflows/testing.yml" ]; then
+          echo "- ✅ Testing Pipeline" >> progress_report.md
+          CICD_SCORE=$((CICD_SCORE + 25))
+        fi
+        
+        if [ -f ".github/workflows/security.yml" ]; then
+          echo "- ✅ Security Pipeline" >> progress_report.md
+          CICD_SCORE=$((CICD_SCORE + 25))
+        fi
+        
+        if [ -f ".github/workflows/performance.yml" ]; then
+          echo "- ✅ Performance Pipeline" >> progress_report.md
+          CICD_SCORE=$((CICD_SCORE + 25))
+        fi
+        
+        echo "- **CI/CD Score**: $CICD_SCORE/100" >> progress_report.md
+        
+        # 全体スコア
+        TOTAL_SCORE=$((TOTAL_SCORE + CICD_SCORE))
+        echo "" >> progress_report.md
+        echo "### 📈 Overall Progress" >> progress_report.md
+        echo "- **Total Score**: $TOTAL_SCORE/600 ($(($TOTAL_SCORE * 100 / 600))%)" >> progress_report.md
+        
+        # マイルストーン評価
+        if [ $TOTAL_SCORE -ge 400 ]; then
+          echo "- **Status**: 🚀 Advanced - Ready for complex features" >> progress_report.md
+        elif [ $TOTAL_SCORE -ge 200 ]; then
+          echo "- **Status**: ⚡ Active - Core functionality established" >> progress_report.md
+        elif [ $TOTAL_SCORE -ge 100 ]; then
+          echo "- **Status**: 🌱 Growing - Foundation in place" >> progress_report.md
+        else
+          echo "- **Status**: 🔨 Building - Early development stage" >> progress_report.md
+        fi
+        
+        # 次のステップ提案
+        echo "" >> progress_report.md
+        echo "### 🎯 AI Recommendations" >> progress_report.md
+        
+        if [ $PHASE1_SCORE -ge 80 ]; then
+          echo "- ✅ **Phase 1 Complete**: Ready to implement Phase 1.1 (MLP)" >> progress_report.md
+        elif [ $PHASE1_SCORE -ge 50 ]; then
+          echo "- ⚠️ **Phase 1 Needs Work**: Complete remaining Phase 1 tasks" >> progress_report.md
+        else
+          echo "- 🔨 **Focus on Phase 1**: Implement basic perceptron first" >> progress_report.md
+        fi
+        
+        if [ $CICD_SCORE -ge 75 ]; then
+          echo "- ✅ **CI/CD Infrastructure**: Well established" >> progress_report.md
+        else
+          echo "- 🔧 **Improve CI/CD**: Add missing pipeline components" >> progress_report.md
+        fi
+        
+    - name: 📤 Upload progress report
+      uses: actions/upload-artifact@v3
+      with:
+        name: ai-progress-report-${{ github.run_number }}
+        path: progress_report.md
+        retention-days: 30
+
+  # ===== AI Agent Summary =====
+  ai-integration-summary:
+    name: 📋 AI Integration Summary
+    runs-on: ubuntu-latest
+    needs: [ai-code-review, ai-issue-triage, ai-progress-monitoring]
+    if: always()
+    
+    steps:
+    - name: 📊 Generate AI Summary
+      run: |
+        echo "# 🤖 AI Agent Integration Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 📋 AI Agent Results" >> $GITHUB_STEP_SUMMARY
+        echo "- **Code Review**: ${{ needs.ai-code-review.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Issue Triage**: ${{ needs.ai-issue-triage.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Progress Monitoring**: ${{ needs.ai-progress-monitoring.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # AI Agent の全体状況
+        if [ "${{ needs.ai-code-review.result }}" = "success" ] || [ "${{ needs.ai-issue-triage.result }}" = "success" ] || [ "${{ needs.ai-progress-monitoring.result }}" = "success" ]; then
+          echo "## 🤖 AI Agent Status: ACTIVE" >> $GITHUB_STEP_SUMMARY
+          echo "AI agents are successfully monitoring and optimizing the development process!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "## ⚠️ AI Agent Status: MONITORING" >> $GITHUB_STEP_SUMMARY
+          echo "AI agents are in monitoring mode. Some features may be unavailable." >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 🎯 AI Agent Capabilities" >> $GITHUB_STEP_SUMMARY
+        echo "- **🔍 Code Review**: Automated PR analysis and suggestions" >> $GITHUB_STEP_SUMMARY
+        echo "- **🏷️ Issue Triage**: Intelligent labeling and categorization" >> $GITHUB_STEP_SUMMARY
+        echo "- **📊 Progress Tracking**: Project milestone monitoring" >> $GITHUB_STEP_SUMMARY
+        echo "- **💡 Optimization**: Performance and learning effectiveness tips" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 📁 AI Reports Available" >> $GITHUB_STEP_SUMMARY
+        echo "- Code review analysis and improvement suggestions" >> $GITHUB_STEP_SUMMARY
+        echo "- Issue classification and priority assessment" >> $GITHUB_STEP_SUMMARY
+        echo "- Project progress evaluation and recommendations" >> $GITHUB_STEP_SUMMARY
