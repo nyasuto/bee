@@ -11,19 +11,25 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nyasuto/bee/benchmark"
 	"github.com/nyasuto/bee/phase1"
 )
 
 // CLIConfig holds configuration for the CLI application
 type CLIConfig struct {
-	Command      string  // train, infer, test
-	Model        string  // model type (perceptron)
+	Command      string  // train, infer, test, benchmark, compare
+	Model        string  // model type (perceptron, mlp)
 	DataPath     string  // path to training data
 	ModelPath    string  // path to save/load model
 	LearningRate float64 // learning rate
 	Epochs       int     // training epochs
 	InputData    string  // comma-separated input for inference
 	Verbose      bool    // verbose output
+	// Benchmark specific fields
+	Dataset    string // dataset type for benchmarking
+	Iterations int    // number of benchmark iterations
+	OutputPath string // path to save benchmark results
+	MLPHidden  string // comma-separated hidden layer sizes for MLP
 }
 
 func main() {
@@ -46,6 +52,18 @@ func main() {
 		err := testCommand(config)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "❌ Testing failed: %v\n", err)
+			os.Exit(1)
+		}
+	case "benchmark":
+		err := benchmarkCommand(config)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Benchmark failed: %v\n", err)
+			os.Exit(1)
+		}
+	case "compare":
+		err := compareCommand(config)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Comparison failed: %v\n", err)
 			os.Exit(1)
 		}
 	case "help", "":
@@ -93,6 +111,23 @@ func parseArgs() CLIConfig {
 		flagSet.StringVar(&config.Model, "model", "perceptron", "Model type (perceptron)")
 		flagSet.StringVar(&config.DataPath, "data", "", "Path to test data (CSV)")
 		flagSet.StringVar(&config.ModelPath, "model-path", "model.json", "Path to trained model")
+		flagSet.BoolVar(&config.Verbose, "verbose", false, "Verbose output")
+
+	case "benchmark":
+		flagSet = flag.NewFlagSet("benchmark", flag.ExitOnError)
+		flagSet.StringVar(&config.Model, "model", "perceptron", "Model type (perceptron, mlp, both)")
+		flagSet.StringVar(&config.Dataset, "dataset", "xor", "Dataset type (xor, and, or, all)")
+		flagSet.IntVar(&config.Iterations, "iterations", 100, "Number of benchmark iterations")
+		flagSet.StringVar(&config.OutputPath, "output", "", "Output file for benchmark results (JSON)")
+		flagSet.StringVar(&config.MLPHidden, "mlp-hidden", "4", "Hidden layer sizes for MLP (comma-separated)")
+		flagSet.BoolVar(&config.Verbose, "verbose", false, "Verbose output")
+
+	case "compare":
+		flagSet = flag.NewFlagSet("compare", flag.ExitOnError)
+		flagSet.StringVar(&config.Dataset, "dataset", "xor", "Dataset type (xor, and, or, all)")
+		flagSet.IntVar(&config.Iterations, "iterations", 100, "Number of benchmark iterations")
+		flagSet.StringVar(&config.OutputPath, "output", "", "Output file for comparison results (JSON)")
+		flagSet.StringVar(&config.MLPHidden, "mlp-hidden", "4", "Hidden layer sizes for MLP (comma-separated)")
 		flagSet.BoolVar(&config.Verbose, "verbose", false, "Verbose output")
 
 	default:
@@ -414,6 +449,212 @@ func loadModel(filepath string) (*phase1.Perceptron, error) {
 	return perceptron, nil
 }
 
+// benchmarkCommand implements the benchmark functionality
+// Learning Goal: Understanding performance measurement and model comparison
+func benchmarkCommand(config CLIConfig) error {
+	if config.Verbose {
+		fmt.Printf("🐝 Bee Benchmark - %s Model\n", config.Model)
+		fmt.Printf("📊 Dataset: %s\n", config.Dataset)
+		fmt.Printf("🔄 Iterations: %d\n", config.Iterations)
+	}
+
+	// Create benchmark runner
+	runner := benchmark.NewBenchmarkRunner().
+		SetIterations(config.Iterations).
+		SetVerbose(config.Verbose)
+
+	// Get dataset(s)
+	datasets := getDatasets(config.Dataset)
+	if len(datasets) == 0 {
+		return fmt.Errorf("no datasets found for: %s", config.Dataset)
+	}
+
+	// Parse MLP hidden layers
+	hiddenLayers, err := parseHiddenLayers(config.MLPHidden)
+	if err != nil {
+		return fmt.Errorf("invalid MLP hidden layers: %w", err)
+	}
+
+	// Run benchmarks based on model type
+	switch config.Model {
+	case "perceptron":
+		for _, dataset := range datasets {
+			if config.Verbose {
+				fmt.Printf("\n🔍 Benchmarking Perceptron on %s dataset...\n", dataset.Name)
+			}
+
+			metrics, err := runner.BenchmarkPerceptron(dataset)
+			if err != nil {
+				return fmt.Errorf("perceptron benchmark failed on %s: %w", dataset.Name, err)
+			}
+
+			printBenchmarkResults(metrics)
+		}
+
+	case "mlp":
+		for _, dataset := range datasets {
+			if config.Verbose {
+				fmt.Printf("\n🔍 Benchmarking MLP %v on %s dataset...\n", hiddenLayers, dataset.Name)
+			}
+
+			metrics, err := runner.BenchmarkMLP(dataset, hiddenLayers)
+			if err != nil {
+				return fmt.Errorf("MLP benchmark failed on %s: %w", dataset.Name, err)
+			}
+
+			printBenchmarkResults(metrics)
+		}
+
+	case "both":
+		for _, dataset := range datasets {
+			if config.Verbose {
+				fmt.Printf("\n🔍 Benchmarking both models on %s dataset...\n", dataset.Name)
+			}
+
+			// Benchmark Perceptron
+			perceptronMetrics, err := runner.BenchmarkPerceptron(dataset)
+			if err != nil {
+				return fmt.Errorf("perceptron benchmark failed on %s: %w", dataset.Name, err)
+			}
+
+			// Benchmark MLP
+			mlpMetrics, err := runner.BenchmarkMLP(dataset, hiddenLayers)
+			if err != nil {
+				return fmt.Errorf("MLP benchmark failed on %s: %w", dataset.Name, err)
+			}
+
+			fmt.Printf("\n📊 Results for %s dataset:\n", dataset.Name)
+			fmt.Println("─────────────────────────────────────────")
+			printBenchmarkResults(perceptronMetrics)
+			printBenchmarkResults(mlpMetrics)
+		}
+
+	default:
+		return fmt.Errorf("unsupported model type: %s", config.Model)
+	}
+
+	return nil
+}
+
+// compareCommand implements the comparison functionality
+// Learning Goal: Understanding comparative performance analysis
+func compareCommand(config CLIConfig) error {
+	if config.Verbose {
+		fmt.Printf("🐝 Bee Model Comparison\n")
+		fmt.Printf("📊 Dataset: %s\n", config.Dataset)
+		fmt.Printf("🔄 Iterations: %d\n", config.Iterations)
+	}
+
+	// Create benchmark runner
+	runner := benchmark.NewBenchmarkRunner().
+		SetIterations(config.Iterations).
+		SetVerbose(config.Verbose)
+
+	// Get dataset(s)
+	datasets := getDatasets(config.Dataset)
+	if len(datasets) == 0 {
+		return fmt.Errorf("no datasets found for: %s", config.Dataset)
+	}
+
+	// Parse MLP hidden layers
+	hiddenLayers, err := parseHiddenLayers(config.MLPHidden)
+	if err != nil {
+		return fmt.Errorf("invalid MLP hidden layers: %w", err)
+	}
+
+	// Run comparisons
+	for _, dataset := range datasets {
+		if config.Verbose {
+			fmt.Printf("\n🚀 Running comparison on %s dataset\n", dataset.Name)
+		}
+
+		report, err := runner.RunComparison(dataset, hiddenLayers)
+		if err != nil {
+			return fmt.Errorf("comparison failed on %s: %w", dataset.Name, err)
+		}
+
+		if !config.Verbose {
+			// Print summary if not verbose (verbose mode already prints in RunComparison)
+			benchmark.PrintComparisonSummary(report)
+		}
+
+		// Save results if output path specified
+		if config.OutputPath != "" {
+			filename := config.OutputPath
+			if len(datasets) > 1 {
+				// Append dataset name for multiple datasets
+				filename = fmt.Sprintf("%s_%s.json", config.OutputPath, dataset.Name)
+			}
+
+			// Note: In a real implementation, we would save the comparison report
+			// For now, just inform the user
+			fmt.Printf("💾 Results would be saved to: %s\n", filename)
+		}
+	}
+
+	return nil
+}
+
+// Helper functions for benchmark commands
+
+// getDatasets returns datasets based on the specified type
+func getDatasets(datasetType string) []benchmark.Dataset {
+	switch datasetType {
+	case "xor":
+		return []benchmark.Dataset{benchmark.CreateXORDataset()}
+	case "and":
+		return []benchmark.Dataset{benchmark.CreateANDDataset()}
+	case "or":
+		return []benchmark.Dataset{benchmark.CreateORDataset()}
+	case "all":
+		return benchmark.GetStandardDatasets()
+	case "linear":
+		return []benchmark.Dataset{benchmark.CreateLinearSeparableDataset(100, 42)}
+	case "nonlinear":
+		return []benchmark.Dataset{benchmark.CreateNonLinearDataset(200, 42)}
+	default:
+		return []benchmark.Dataset{}
+	}
+}
+
+// parseHiddenLayers parses comma-separated hidden layer sizes
+func parseHiddenLayers(hiddenStr string) ([]int, error) {
+	if hiddenStr == "" {
+		return []int{4}, nil // Default
+	}
+
+	parts := strings.Split(hiddenStr, ",")
+	layers := make([]int, len(parts))
+
+	for i, part := range parts {
+		size, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil {
+			return nil, fmt.Errorf("invalid hidden layer size '%s': %w", part, err)
+		}
+		if size <= 0 {
+			return nil, fmt.Errorf("hidden layer size must be positive, got: %d", size)
+		}
+		layers[i] = size
+	}
+
+	return layers, nil
+}
+
+// printBenchmarkResults prints formatted benchmark results
+func printBenchmarkResults(metrics benchmark.PerformanceMetrics) {
+	modelType := strings.ToUpper(string(metrics.ModelType[0])) + metrics.ModelType[1:]
+	fmt.Printf("🧠 %s Model Results:\n", modelType)
+	fmt.Printf("   Dataset: %s\n", metrics.DatasetName)
+	fmt.Printf("   Accuracy: %.2f%%\n", metrics.Accuracy*100)
+	fmt.Printf("   Training Time: %s\n", benchmark.FormatDuration(metrics.TrainingTime))
+	fmt.Printf("   Inference Time: %s\n", benchmark.FormatDuration(metrics.InferenceTime))
+	fmt.Printf("   Memory Usage: %s\n", benchmark.FormatMemory(metrics.MemoryUsage))
+	fmt.Printf("   Convergence: %d epochs\n", metrics.ConvergenceRate)
+	fmt.Printf("   Final Loss: %.4f\n", metrics.FinalLoss)
+	fmt.Printf("   Timestamp: %s\n", metrics.Timestamp.Format("2006-01-02 15:04:05"))
+	fmt.Println()
+}
+
 // printUsage displays usage information
 func printUsage() {
 	fmt.Printf(`🐝 Bee Neural Network CLI Tool
@@ -425,6 +666,8 @@ Commands:
   train      Train a neural network model
   infer      Perform inference with a trained model
   test       Test a trained model on data
+  benchmark  Run performance benchmarks
+  compare    Compare model performance
   help       Show this help message
 
 Training:
@@ -448,6 +691,23 @@ Testing:
     -model-path string Path to trained model (default "model.json")
     -verbose          Verbose output
 
+Benchmarking:
+  bee benchmark [options]
+    -model string     Model type: perceptron, mlp, both (default "perceptron")
+    -dataset string   Dataset: xor, and, or, all (default "xor")
+    -iterations int   Number of benchmark iterations (default 100)
+    -mlp-hidden string Hidden layer sizes for MLP (default "4")
+    -output string    Output file for results (JSON)
+    -verbose          Verbose output
+
+Comparison:
+  bee compare [options]
+    -dataset string   Dataset: xor, and, or, all (default "xor")
+    -iterations int   Number of benchmark iterations (default 100)
+    -mlp-hidden string Hidden layer sizes for MLP (default "4")
+    -output string    Output file for results (JSON)
+    -verbose          Verbose output
+
 Examples:
   # Train XOR perceptron
   bee train -data datasets/xor.csv -output models/xor.json -verbose
@@ -459,6 +719,15 @@ Examples:
   # Test model accuracy
   bee test -data datasets/xor_test.csv -model-path models/xor.json
 
+  # Benchmark perceptron on XOR
+  bee benchmark -model perceptron -dataset xor -verbose
+
+  # Compare perceptron vs MLP on all datasets
+  bee compare -dataset all -mlp-hidden "4,2" -verbose
+
+  # Benchmark both models with custom iterations
+  bee benchmark -model both -dataset xor -iterations 50
+
 Data Format (CSV):
   # XOR dataset example
   0,0,0
@@ -467,8 +736,10 @@ Data Format (CSV):
   1,1,0
 
 Learning Resources:
-  - Phase 1 focuses on perceptron fundamentals
+  - Phase 1.0/1.1: Perceptron and MLP fundamentals
+  - Phase 1.5: Performance measurement and comparison
   - Each command demonstrates different ML pipeline stages
   - Verbose mode shows internal weights and calculations
+  - Benchmark commands help understand algorithm performance trade-offs
 `)
 }

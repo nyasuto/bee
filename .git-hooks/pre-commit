@@ -47,25 +47,7 @@ fi
 
 # 品質チェック実行
 echo "🔍 品質チェック実行中..."
-if command -v make >/dev/null 2>&1; then
-    make quality
-else
-    echo "⚠️  Makefileが見つかりません - 基本チェックのみ実行"
-    
-    # Go ファイルがある場合は基本チェック
-    if ls *.go >/dev/null 2>&1 || find . -name "*.go" -type f | grep -q .; then
-        echo "🔍 Go構文チェック..."
-        if command -v go >/dev/null 2>&1; then
-            go fmt ./...
-            go vet ./...
-            if command -v golint >/dev/null 2>&1; then
-                golint ./...
-            fi
-        else
-            echo "⚠️  Go toolchain が見つかりません"
-        fi
-    fi
-fi
+make quality
 
 # Makefileの変更がある場合
 makefile_changed=$(git diff --cached --name-only | grep -E '^Makefile$' || true)
