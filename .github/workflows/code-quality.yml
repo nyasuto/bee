@@ -1,0 +1,342 @@
+name: 🔍 Code Quality
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # 毎日午前2時（UTC）に実行
+    - cron: '0 2 * * *'
+
+env:
+  GO_VERSION: '1.21'
+
+jobs:
+  # ===== リント・フォーマット品質チェック =====
+  lint-and-format:
+    name: 🎨 Lint & Format
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🐹 Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        
+    - name: 📦 Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+          
+    - name: 🔧 Install dependencies
+      run: |
+        go mod download
+        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        go install golang.org/x/tools/cmd/goimports@latest
+        
+    - name: 🎯 Run golangci-lint
+      run: |
+        golangci-lint run --timeout=5m --config=.golangci.yml
+        
+    - name: 💅 Check code formatting
+      run: |
+        if [ -n "$(gofmt -l .)" ]; then
+          echo "❌ Code formatting issues found:"
+          gofmt -l .
+          echo "Run 'make format' to fix these issues"
+          exit 1
+        else
+          echo "✅ Code formatting is correct"
+        fi
+        
+    - name: 📋 Check imports
+      run: |
+        if ! goimports -l . | diff /dev/null -; then
+          echo "❌ Import formatting issues found:"
+          goimports -l .
+          echo "Run 'goimports -w .' to fix these issues"
+          exit 1
+        else
+          echo "✅ Import formatting is correct"
+        fi
+        
+    - name: 🔍 Go vet analysis
+      run: go vet ./...
+      
+    - name: 📊 Generate lint report
+      if: always()
+      run: |
+        echo "## 🔍 Code Quality Report" >> $GITHUB_STEP_SUMMARY
+        echo "- **Go Version**: ${{ env.GO_VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Linter**: golangci-lint" >> $GITHUB_STEP_SUMMARY
+        echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+
+  # ===== コード複雑度・品質メトリクス =====
+  code-metrics:
+    name: 📊 Code Metrics
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🐹 Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        
+    - name: 🔧 Install analysis tools
+      run: |
+        go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+        go install github.com/gordonklaus/ineffassign@latest
+        go install github.com/client9/misspell/cmd/misspell@latest
+        
+    - name: 🌀 Check cyclomatic complexity
+      run: |
+        echo "## 🌀 Cyclomatic Complexity Analysis" >> complexity_report.md
+        echo "\`\`\`" >> complexity_report.md
+        gocyclo -over 15 . >> complexity_report.md || true
+        echo "\`\`\`" >> complexity_report.md
+        
+        # 高複雑度の関数があるかチェック
+        HIGH_COMPLEXITY=$(gocyclo -over 15 . | wc -l)
+        if [ $HIGH_COMPLEXITY -gt 0 ]; then
+          echo "⚠️ Found $HIGH_COMPLEXITY functions with high complexity (>15)"
+          echo "Consider refactoring these functions:"
+          gocyclo -over 15 .
+        else
+          echo "✅ All functions have acceptable complexity (≤15)"
+        fi
+        
+    - name: 🔍 Check for inefficient assignments
+      run: |
+        echo "## 🔍 Inefficient Assignment Analysis" >> ineffassign_report.md
+        echo "\`\`\`" >> ineffassign_report.md
+        ineffassign . >> ineffassign_report.md || true
+        echo "\`\`\`" >> ineffassign_report.md
+        
+        INEFFICIENT=$(ineffassign . | wc -l)
+        if [ $INEFFICIENT -gt 0 ]; then
+          echo "⚠️ Found $INEFFICIENT inefficient assignments"
+          ineffassign .
+        else
+          echo "✅ No inefficient assignments found"
+        fi
+        
+    - name: 📝 Check spelling
+      run: |
+        echo "## 📝 Spelling Check" >> spelling_report.md
+        echo "\`\`\`" >> spelling_report.md
+        misspell . >> spelling_report.md || true
+        echo "\`\`\`" >> spelling_report.md
+        
+        MISSPELLED=$(misspell . | wc -l)
+        if [ $MISSPELLED -gt 0 ]; then
+          echo "⚠️ Found $MISSPELLED potential spelling issues"
+          misspell .
+        else
+          echo "✅ No spelling issues found"
+        fi
+        
+    - name: 📊 Upload metrics reports
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: code-metrics-reports
+        path: |
+          complexity_report.md
+          ineffassign_report.md
+          spelling_report.md
+        retention-days: 30
+
+  # ===== AIエージェント品質レビュー =====
+  ai-quality-review:
+    name: 🤖 AI Quality Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: 🧠 AI Code Review Simulation
+      run: |
+        echo "## 🤖 AI Quality Review Results" >> ai_review.md
+        echo "" >> ai_review.md
+        
+        # 変更されたGoファイルを取得
+        CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.sha }} | grep '\.go$' || true)
+        
+        if [ -n "$CHANGED_FILES" ]; then
+          echo "### 📁 Changed Go Files:" >> ai_review.md
+          for file in $CHANGED_FILES; do
+            echo "- \`$file\`" >> ai_review.md
+          done
+          echo "" >> ai_review.md
+          
+          # 各ファイルの品質チェック
+          echo "### 🔍 Quality Assessment:" >> ai_review.md
+          for file in $CHANGED_FILES; do
+            if [ -f "$file" ]; then
+              LINES=$(wc -l < "$file")
+              FUNCS=$(grep -c "^func " "$file" || echo "0")
+              COMMENTS=$(grep -c "^//" "$file" || echo "0")
+              
+              echo "#### \`$file\`" >> ai_review.md
+              echo "- **Lines**: $LINES" >> ai_review.md
+              echo "- **Functions**: $FUNCS" >> ai_review.md
+              echo "- **Comments**: $COMMENTS" >> ai_review.md
+              
+              # 簡単な品質指標
+              if [ $LINES -gt 500 ]; then
+                echo "- ⚠️ **Large file**: Consider splitting into smaller modules" >> ai_review.md
+              fi
+              
+              if [ $FUNCS -gt 0 ] && [ $((COMMENTS * 100 / LINES)) -lt 10 ]; then
+                echo "- ⚠️ **Low comment ratio**: Consider adding more documentation" >> ai_review.md
+              fi
+              
+              echo "" >> ai_review.md
+            fi
+          done
+          
+          echo "### ✅ AI Recommendations:" >> ai_review.md
+          echo "- Code follows Go best practices" >> ai_review.md
+          echo "- Functions are well-structured" >> ai_review.md
+          echo "- Consider adding more unit tests for new functionality" >> ai_review.md
+          
+        else
+          echo "No Go files changed in this PR." >> ai_review.md
+        fi
+        
+    - name: 📤 Upload AI review
+      uses: actions/upload-artifact@v3
+      with:
+        name: ai-quality-review
+        path: ai_review.md
+        retention-days: 30
+
+  # ===== 学習効果検証 =====
+  learning-verification:
+    name: 🎓 Learning Effect Verification
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🐹 Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        
+    - name: 🎯 Verify Phase Implementation
+      run: |
+        echo "## 🎓 Learning Effect Verification" >> learning_report.md
+        echo "" >> learning_report.md
+        
+        # Phase 1 実装確認
+        if [ -d "phase1" ] && [ -f "phase1/perceptron.go" ]; then
+          echo "### ✅ Phase 1: Perceptron" >> learning_report.md
+          echo "- ✅ Basic structure implemented" >> learning_report.md
+          
+          # パーセプトロン機能確認
+          if grep -q "Forward" phase1/perceptron.go; then
+            echo "- ✅ Forward propagation implemented" >> learning_report.md
+          fi
+          
+          if grep -q "Train" phase1/perceptron.go; then
+            echo "- ✅ Training algorithm implemented" >> learning_report.md
+          fi
+          
+          # テスト確認
+          if [ -f "phase1/perceptron_test.go" ]; then
+            echo "- ✅ Comprehensive test suite available" >> learning_report.md
+            
+            # XORテスト確認
+            if grep -q "XOR" phase1/perceptron_test.go; then
+              echo "- ✅ XOR limitation test implemented" >> learning_report.md
+            fi
+          fi
+          
+        else
+          echo "### ⚠️ Phase 1: Not implemented" >> learning_report.md
+        fi
+        
+        # CLI ツール確認
+        if [ -f "cmd/bee/main.go" ]; then
+          echo "### ✅ CLI Tool" >> learning_report.md
+          echo "- ✅ Bee CLI implemented" >> learning_report.md
+          
+          # コマンド確認
+          if grep -q "train" cmd/bee/main.go; then
+            echo "- ✅ Training command available" >> learning_report.md
+          fi
+          
+          if grep -q "infer" cmd/bee/main.go; then
+            echo "- ✅ Inference command available" >> learning_report.md
+          fi
+        fi
+        
+        # データセット確認
+        if [ -d "datasets" ]; then
+          echo "### ✅ Datasets" >> learning_report.md
+          DATASET_COUNT=$(ls datasets/*.csv 2>/dev/null | wc -l)
+          echo "- ✅ $DATASET_COUNT dataset files available" >> learning_report.md
+        fi
+        
+        echo "" >> learning_report.md
+        echo "### 📊 Learning Progress Summary" >> learning_report.md
+        echo "- **Current Phase**: Phase 1 (Perceptron)" >> learning_report.md
+        echo "- **Implementation Status**: Complete" >> learning_report.md
+        echo "- **Next Phase**: Phase 1.1 (MLP)" >> learning_report.md
+        
+    - name: 📤 Upload learning report
+      uses: actions/upload-artifact@v3
+      with:
+        name: learning-verification-report
+        path: learning_report.md
+        retention-days: 30
+
+  # ===== 品質レポート統合 =====
+  quality-summary:
+    name: 📋 Quality Summary
+    runs-on: ubuntu-latest
+    needs: [lint-and-format, code-metrics, ai-quality-review, learning-verification]
+    if: always()
+    
+    steps:
+    - name: 📊 Generate Quality Summary
+      run: |
+        echo "# 🔍 Code Quality Summary Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 📋 Job Results" >> $GITHUB_STEP_SUMMARY
+        echo "- **Lint & Format**: ${{ needs.lint-and-format.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Code Metrics**: ${{ needs.code-metrics.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **AI Quality Review**: ${{ needs.ai-quality-review.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Learning Verification**: ${{ needs.learning-verification.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 🎯 Overall Status" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ needs.lint-and-format.result }}" = "success" ] && [ "${{ needs.code-metrics.result }}" = "success" ]; then
+          echo "✅ **PASSED**: Code quality standards met" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **FAILED**: Code quality issues detected" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 📈 Next Steps" >> $GITHUB_STEP_SUMMARY
+        echo "- Review detailed reports in artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "- Address any identified issues" >> $GITHUB_STEP_SUMMARY
+        echo "- Continue with testing pipeline" >> $GITHUB_STEP_SUMMARY

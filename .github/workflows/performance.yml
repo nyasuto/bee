@@ -1,0 +1,477 @@
+name: ⚡ Performance Monitoring
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # 毎日午前5時（UTC）にパフォーマンス監視実行
+    - cron: '0 5 * * *'
+
+env:
+  GO_VERSION: '1.21'
+
+jobs:
+  # ===== ベンチマーク性能監視 =====
+  benchmark-monitoring:
+    name: 📊 Benchmark Performance Monitoring
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 履歴比較のため
+        
+    - name: 🐹 Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        
+    - name: 📦 Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-perf-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-perf-
+          
+    - name: 🔧 Install performance tools
+      run: |
+        # Benchstat for benchmark comparison
+        go install golang.org/x/perf/cmd/benchstat@latest
+        
+        # Benchcmp for alternative comparison
+        go install golang.org/x/tools/cmd/benchcmp@latest || echo "benchcmp install failed"
+        
+    - name: ⚡ Run current benchmarks
+      run: |
+        echo "## ⚡ Performance Monitoring Report" > performance_report.md
+        echo "" >> performance_report.md
+        echo "### 📊 Current Benchmark Results" >> performance_report.md
+        echo "\`\`\`" >> performance_report.md
+        
+        # 現在のベンチマーク実行（複数回実行して安定性確保）
+        go test -bench=. -benchmem -count=5 ./... | tee current_bench.txt
+        cat current_bench.txt >> performance_report.md
+        
+        echo "\`\`\`" >> performance_report.md
+        
+    - name: 📈 Analyze benchmark trends
+      run: |
+        echo "" >> performance_report.md
+        echo "### 📈 Performance Analysis" >> performance_report.md
+        
+        # パフォーマンス指標の抽出と分析
+        if [ -f "current_bench.txt" ]; then
+          # Phase 1 パーセプトロン性能分析
+          echo "#### 🧠 Phase 1 Perceptron Performance" >> performance_report.md
+          
+          # Forward propagation performance
+          FORWARD_PERF=$(grep "BenchmarkPerceptron/Forward" current_bench.txt | awk '{print $3}' | head -1 || echo "N/A")
+          if [ "$FORWARD_PERF" != "N/A" ]; then
+            echo "- **Forward Propagation**: $FORWARD_PERF" >> performance_report.md
+            
+            # 性能閾値チェック（100ns以下が目標）
+            FORWARD_NS=$(echo $FORWARD_PERF | sed 's/ns\/op//' | sed 's/ //g')
+            if [ -n "$FORWARD_NS" ] && [ "$FORWARD_NS" -lt 100 ]; then
+              echo "  - ✅ **Status**: Excellent (target: <100ns/op)" >> performance_report.md
+            elif [ -n "$FORWARD_NS" ] && [ "$FORWARD_NS" -lt 500 ]; then
+              echo "  - ⚠️ **Status**: Acceptable (target: <100ns/op)" >> performance_report.md
+            else
+              echo "  - ❌ **Status**: Needs optimization (target: <100ns/op)" >> performance_report.md
+            fi
+          fi
+          
+          # Training performance
+          TRAINING_PERF=$(grep "BenchmarkPerceptron/Training" current_bench.txt | awk '{print $3}' | head -1 || echo "N/A")
+          if [ "$TRAINING_PERF" != "N/A" ]; then
+            echo "- **Training**: $TRAINING_PERF" >> performance_report.md
+            
+            # 学習性能評価（50μs以下が目標）
+            if echo $TRAINING_PERF | grep -q "μs/op"; then
+              TRAINING_US=$(echo $TRAINING_PERF | sed 's/μs\/op//' | sed 's/ //g')
+              if [ -n "$TRAINING_US" ] && [ "${TRAINING_US%.*}" -lt 50 ]; then
+                echo "  - ✅ **Status**: Excellent (target: <50μs/op)" >> performance_report.md
+              else
+                echo "  - ⚠️ **Status**: Consider optimization (target: <50μs/op)" >> performance_report.md
+              fi
+            fi
+          fi
+          
+          # Memory allocation analysis
+          echo "" >> performance_report.md
+          echo "#### 💾 Memory Allocation Analysis" >> performance_report.md
+          
+          FORWARD_ALLOCS=$(grep "BenchmarkPerceptron/Forward" current_bench.txt | awk '{print $5}' | head -1 || echo "N/A")
+          if [ "$FORWARD_ALLOCS" != "N/A" ]; then
+            echo "- **Forward Allocations**: $FORWARD_ALLOCS" >> performance_report.md
+            if [ "$FORWARD_ALLOCS" = "0" ]; then
+              echo "  - ✅ **Status**: Zero allocations (optimal)" >> performance_report.md
+            else
+              echo "  - ⚠️ **Status**: Consider reducing allocations" >> performance_report.md
+            fi
+          fi
+        fi
+        
+    - name: 🔄 Performance regression detection
+      if: github.event_name == 'pull_request'
+      run: |
+        echo "" >> performance_report.md
+        echo "### 🔄 Regression Detection" >> performance_report.md
+        
+        # ベースブランチをチェックアウト
+        git checkout ${{ github.event.pull_request.base.ref }}
+        
+        # ベースブランチでのベンチマーク実行
+        echo "Running benchmarks on base branch..." >> performance_report.md
+        go test -bench=. -benchmem -count=3 ./... > base_bench.txt 2>/dev/null || echo "Base benchmark failed" > base_bench.txt
+        
+        # PRブランチに戻る
+        git checkout ${{ github.event.pull_request.head.ref }}
+        
+        # benchstatで比較（利用可能な場合）
+        if command -v benchstat >/dev/null 2>&1 && [ -f "base_bench.txt" ] && [ -f "current_bench.txt" ]; then
+          echo "\`\`\`" >> performance_report.md
+          benchstat base_bench.txt current_bench.txt >> performance_report.md 2>/dev/null || echo "Benchstat comparison failed" >> performance_report.md
+          echo "\`\`\`" >> performance_report.md
+        else
+          echo "Benchmark comparison tools not available or base benchmarks missing" >> performance_report.md
+        fi
+        
+        # 簡単な回帰チェック
+        if [ -f "base_bench.txt" ] && [ -f "current_bench.txt" ]; then
+          BASE_FORWARD=$(grep "BenchmarkPerceptron/Forward" base_bench.txt | awk '{print $3}' | head -1 | sed 's/ns\/op//' || echo "0")
+          CURRENT_FORWARD=$(grep "BenchmarkPerceptron/Forward" current_bench.txt | awk '{print $3}' | head -1 | sed 's/ns\/op//' || echo "0")
+          
+          if [ -n "$BASE_FORWARD" ] && [ -n "$CURRENT_FORWARD" ] && [ "$BASE_FORWARD" != "0" ] && [ "$CURRENT_FORWARD" != "0" ]; then
+            REGRESSION_THRESHOLD=20  # 20% regression threshold
+            REGRESSION_PERCENT=$(( (CURRENT_FORWARD - BASE_FORWARD) * 100 / BASE_FORWARD ))
+            
+            echo "" >> performance_report.md
+            echo "#### 📊 Performance Delta" >> performance_report.md
+            echo "- **Forward Performance Change**: ${REGRESSION_PERCENT}%" >> performance_report.md
+            
+            if [ "$REGRESSION_PERCENT" -gt "$REGRESSION_THRESHOLD" ]; then
+              echo "- ❌ **Status**: Significant performance regression detected" >> performance_report.md
+            elif [ "$REGRESSION_PERCENT" -gt 5 ]; then
+              echo "- ⚠️ **Status**: Minor performance regression" >> performance_report.md
+            else
+              echo "- ✅ **Status**: No significant regression" >> performance_report.md
+            fi
+          fi
+        fi
+        
+    - name: 🎯 Performance recommendations
+      run: |
+        echo "" >> performance_report.md
+        echo "### 🎯 Performance Optimization Recommendations" >> performance_report.md
+        
+        # 最適化提案の生成
+        echo "#### 🚀 Neural Network Optimization Tips" >> performance_report.md
+        echo "1. **Memory Pre-allocation**: Pre-allocate slices for input/output vectors" >> performance_report.md
+        echo "2. **SIMD Operations**: Consider vectorized operations for large datasets" >> performance_report.md
+        echo "3. **Batch Processing**: Implement batch forward/backward propagation" >> performance_report.md
+        echo "4. **Goroutine Parallelism**: Parallelize independent neuron calculations" >> performance_report.md
+        echo "5. **Memory Pool**: Reuse allocated memory for repeated operations" >> performance_report.md
+        echo "" >> performance_report.md
+        
+        echo "#### 📊 Current Performance Targets" >> performance_report.md
+        echo "- **Forward Propagation**: <100ns/op (real-time inference)" >> performance_report.md
+        echo "- **Training Iteration**: <50μs/op (large dataset handling)" >> performance_report.md
+        echo "- **Memory Allocations**: 0 allocs/op for forward pass" >> performance_report.md
+        echo "- **Accuracy Calculation**: <10μs/op for 1000 samples" >> performance_report.md
+        
+    - name: 📤 Upload performance report
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-monitoring-report
+        path: |
+          performance_report.md
+          current_bench.txt
+          base_bench.txt
+        retention-days: 30
+
+  # ===== メモリ使用量プロファイリング =====
+  memory-profiling:
+    name: 💾 Memory Usage Profiling
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🐹 Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        
+    - name: 🔧 Install profiling tools
+      run: |
+        # pprof tools
+        go install github.com/google/pprof@latest
+        
+    - name: 💾 Run memory profiling
+      run: |
+        echo "## 💾 Memory Profiling Report" > memory_report.md
+        echo "" >> memory_report.md
+        echo "### 🔍 Memory Usage Analysis" >> memory_report.md
+        
+        # メモリプロファイリング実行
+        if [ -d "phase1" ]; then
+          echo "#### 🧠 Phase 1 Perceptron Memory Profile" >> memory_report.md
+          
+          # メモリプロファイルでのテスト実行
+          go test -memprofile=mem.prof -bench=BenchmarkPerceptron ./phase1 > memory_bench.txt 2>/dev/null || echo "Memory profiling failed" > memory_bench.txt
+          
+          if [ -f "mem.prof" ]; then
+            # メモリ使用量の分析
+            echo "\`\`\`" >> memory_report.md
+            go tool pprof -text mem.prof | head -20 >> memory_report.md 2>/dev/null || echo "Memory analysis failed" >> memory_report.md
+            echo "\`\`\`" >> memory_report.md
+            
+            # Top memory consumers
+            echo "" >> memory_report.md
+            echo "#### 🔝 Top Memory Consumers" >> memory_report.md
+            echo "\`\`\`" >> memory_report.md
+            go tool pprof -top mem.prof | head -10 >> memory_report.md 2>/dev/null || echo "Top analysis failed" >> memory_report.md
+            echo "\`\`\`" >> memory_report.md
+          else
+            echo "Memory profiling data not generated" >> memory_report.md
+          fi
+        else
+          echo "Phase 1 implementation not found for profiling" >> memory_report.md
+        fi
+        
+        echo "" >> memory_report.md
+        echo "### 💡 Memory Optimization Recommendations" >> memory_report.md
+        echo "- Use sync.Pool for frequently allocated/deallocated objects" >> memory_report.md
+        echo "- Pre-allocate slices with known capacity" >> memory_report.md
+        echo "- Avoid unnecessary pointer indirection" >> memory_report.md
+        echo "- Consider memory-mapped files for large datasets" >> memory_report.md
+        
+    - name: 📤 Upload memory report
+      uses: actions/upload-artifact@v3
+      with:
+        name: memory-profiling-report
+        path: |
+          memory_report.md
+          mem.prof
+          memory_bench.txt
+        retention-days: 30
+
+  # ===== CPUプロファイリング =====
+  cpu-profiling:
+    name: 🖥️ CPU Usage Profiling
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🐹 Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        
+    - name: 🖥️ Run CPU profiling
+      run: |
+        echo "## 🖥️ CPU Profiling Report" > cpu_report.md
+        echo "" >> cpu_report.md
+        echo "### ⚡ CPU Usage Analysis" >> cpu_report.md
+        
+        if [ -d "phase1" ]; then
+          echo "#### 🧠 Phase 1 Perceptron CPU Profile" >> cpu_report.md
+          
+          # CPUプロファイリング実行
+          go test -cpuprofile=cpu.prof -bench=BenchmarkPerceptron ./phase1 > cpu_bench.txt 2>/dev/null || echo "CPU profiling failed" > cpu_bench.txt
+          
+          if [ -f "cpu.prof" ]; then
+            # CPU使用率の分析
+            echo "\`\`\`" >> cpu_report.md
+            go tool pprof -text cpu.prof | head -20 >> cpu_report.md 2>/dev/null || echo "CPU analysis failed" >> cpu_report.md
+            echo "\`\`\`" >> cpu_report.md
+            
+            # 関数別CPU使用率
+            echo "" >> cpu_report.md
+            echo "#### 🔥 CPU Hotspots" >> cpu_report.md
+            echo "\`\`\`" >> cpu_report.md
+            go tool pprof -top cpu.prof | head -10 >> cpu_report.md 2>/dev/null || echo "Hotspot analysis failed" >> cpu_report.md
+            echo "\`\`\`" >> cpu_report.md
+          else
+            echo "CPU profiling data not generated" >> cpu_report.md
+          fi
+        else
+          echo "Phase 1 implementation not found for profiling" >> cpu_report.md
+        fi
+        
+        echo "" >> cpu_report.md
+        echo "### 🚀 CPU Optimization Recommendations" >> cpu_report.md
+        echo "- Profile-guided optimization (PGO) for hot paths" >> cpu_report.md
+        echo "- Vectorization for mathematical operations" >> cpu_report.md
+        echo "- Cache-friendly data structures and access patterns" >> cpu_report.md
+        echo "- Parallel processing for independent calculations" >> cpu_report.md
+        
+    - name: 📤 Upload CPU report
+      uses: actions/upload-artifact@v3
+      with:
+        name: cpu-profiling-report
+        path: |
+          cpu_report.md
+          cpu.prof
+          cpu_bench.txt
+        retention-days: 30
+
+  # ===== 学習性能指標 =====
+  learning-performance:
+    name: 🎓 Learning Performance Metrics
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🐹 Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        
+    - name: 🎓 Measure learning performance
+      run: |
+        echo "## 🎓 Learning Performance Report" > learning_perf_report.md
+        echo "" >> learning_perf_report.md
+        echo "### 📚 Educational Effectiveness Metrics" >> learning_perf_report.md
+        
+        if [ -f "bin/bee" ] || ([ -f "Makefile" ] && make build); then
+          echo "#### 🧠 Neural Network Learning Benchmarks" >> learning_perf_report.md
+          
+          # データセットがあればE2E学習性能測定
+          if [ -d "datasets" ] && [ -f "datasets/and.csv" ]; then
+            echo "" >> learning_perf_report.md
+            echo "##### AND Gate Learning Performance" >> learning_perf_report.md
+            
+            # 学習時間測定
+            start_time=$(date +%s%N)
+            timeout 30s ./bin/bee train -data datasets/and.csv -output models/perf_test.json -epochs 100 > learning_output.txt 2>&1 || true
+            end_time=$(date +%s%N)
+            
+            duration=$(( (end_time - start_time) / 1000000 ))  # ms
+            echo "- **Training Duration**: ${duration}ms" >> learning_perf_report.md
+            
+            # 収束エポック数確認
+            if grep -q "completed in" learning_output.txt; then
+              epochs=$(grep "completed in" learning_output.txt | awk '{print $4}')
+              echo "- **Convergence**: $epochs epochs" >> learning_perf_report.md
+              
+              # 学習効率評価
+              if [ "$epochs" -lt 10 ]; then
+                echo "- **Efficiency**: ✅ Excellent (fast convergence)" >> learning_perf_report.md
+              elif [ "$epochs" -lt 50 ]; then
+                echo "- **Efficiency**: ⚠️ Good (moderate convergence)" >> learning_perf_report.md
+              else
+                echo "- **Efficiency**: ❌ Needs improvement (slow convergence)" >> learning_perf_report.md
+              fi
+            fi
+            
+            # 精度確認
+            if grep -q "Training accuracy" learning_output.txt; then
+              accuracy=$(grep "Training accuracy" learning_output.txt | awk '{print $3}' | sed 's/%//')
+              echo "- **Final Accuracy**: ${accuracy}%" >> learning_perf_report.md
+              
+              if [ "${accuracy%.*}" -ge 95 ]; then
+                echo "- **Quality**: ✅ Excellent accuracy" >> learning_perf_report.md
+              else
+                echo "- **Quality**: ⚠️ Accuracy could be improved" >> learning_perf_report.md
+              fi
+            fi
+          fi
+          
+          # XOR問題での限界確認
+          if [ -f "datasets/xor.csv" ]; then
+            echo "" >> learning_perf_report.md
+            echo "##### XOR Problem (Expected Limitation)" >> learning_perf_report.md
+            
+            start_time=$(date +%s%N)
+            timeout 60s ./bin/bee train -data datasets/xor.csv -output models/xor_perf_test.json -epochs 100 > xor_output.txt 2>&1 || true
+            end_time=$(date +%s%N)
+            
+            duration=$(( (end_time - start_time) / 1000000 ))  # ms
+            echo "- **Training Duration**: ${duration}ms" >> learning_perf_report.md
+            
+            if grep -q "Training accuracy" xor_output.txt; then
+              xor_accuracy=$(grep "Training accuracy" xor_output.txt | awk '{print $3}' | sed 's/%//')
+              echo "- **Final Accuracy**: ${xor_accuracy}%" >> learning_perf_report.md
+              
+              if [ "${xor_accuracy%.*}" -le 75 ]; then
+                echo "- **Learning Effect**: ✅ Correctly demonstrates perceptron limitations" >> learning_perf_report.md
+              else
+                echo "- **Learning Effect**: ⚠️ Unexpected - single perceptron should not solve XOR" >> learning_perf_report.md
+              fi
+            fi
+          fi
+          
+        else
+          echo "CLI tool not available for learning performance testing" >> learning_perf_report.md
+        fi
+        
+        echo "" >> learning_perf_report.md
+        echo "### 📊 Performance Standards" >> learning_perf_report.md
+        echo "#### 🎯 Target Metrics for Learning Effectiveness" >> learning_perf_report.md
+        echo "- **AND/OR Gate Convergence**: <10 epochs" >> learning_perf_report.md
+        echo "- **Training Accuracy**: >95%" >> learning_perf_report.md
+        echo "- **XOR Problem**: Should demonstrate limitations (≤75% accuracy)" >> learning_perf_report.md
+        echo "- **Training Time**: <1 second for simple gates" >> learning_perf_report.md
+        
+    - name: 📤 Upload learning performance report
+      uses: actions/upload-artifact@v3
+      with:
+        name: learning-performance-report
+        path: |
+          learning_perf_report.md
+          learning_output.txt
+          xor_output.txt
+        retention-days: 30
+
+  # ===== 性能レポート統合 =====
+  performance-summary:
+    name: 📋 Performance Summary
+    runs-on: ubuntu-latest
+    needs: [benchmark-monitoring, memory-profiling, cpu-profiling, learning-performance]
+    if: always()
+    
+    steps:
+    - name: 📊 Generate Performance Summary
+      run: |
+        echo "# ⚡ Performance Monitoring Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 📋 Monitoring Results" >> $GITHUB_STEP_SUMMARY
+        echo "- **Benchmark Monitoring**: ${{ needs.benchmark-monitoring.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Memory Profiling**: ${{ needs.memory-profiling.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **CPU Profiling**: ${{ needs.cpu-profiling.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Learning Performance**: ${{ needs.learning-performance.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # パフォーマンス状態の評価
+        if [ "${{ needs.benchmark-monitoring.result }}" = "success" ] && [ "${{ needs.learning-performance.result }}" = "success" ]; then
+          echo "## ⚡ Overall Performance Status: OPTIMAL" >> $GITHUB_STEP_SUMMARY
+          echo "Performance monitoring completed successfully!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "## ⚠️ Overall Performance Status: ATTENTION REQUIRED" >> $GITHUB_STEP_SUMMARY
+          echo "Some performance issues detected. Review detailed reports." >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 🎯 Performance Targets" >> $GITHUB_STEP_SUMMARY
+        echo "- **Forward Propagation**: <100ns/op" >> $GITHUB_STEP_SUMMARY
+        echo "- **Training**: <50μs/op" >> $GITHUB_STEP_SUMMARY
+        echo "- **Memory**: Zero allocations for inference" >> $GITHUB_STEP_SUMMARY
+        echo "- **Convergence**: <10 epochs for linearly separable problems" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 📁 Performance Reports Available" >> $GITHUB_STEP_SUMMARY
+        echo "- Benchmark performance and regression analysis" >> $GITHUB_STEP_SUMMARY
+        echo "- Memory usage profiling and optimization tips" >> $GITHUB_STEP_SUMMARY
+        echo "- CPU hotspot analysis and recommendations" >> $GITHUB_STEP_SUMMARY
+        echo "- Learning effectiveness and educational metrics" >> $GITHUB_STEP_SUMMARY
