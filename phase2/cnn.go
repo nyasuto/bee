@@ -1046,3 +1046,311 @@ func (cell *RNNCell) activateDerivative(x float64) float64 {
 		return 1.0 // Linear
 	}
 }
+
+// LSTMCell represents a single LSTM cell with all gate mechanisms
+// Mathematical Foundation: Long Short-Term Memory for handling long-term dependencies
+// Learning Goal: Understanding gated memory control and gradient flow
+type LSTMCell struct {
+	InputSize  int // Size of input vector
+	HiddenSize int // Size of hidden/cell state
+
+	// Gate weights: [hiddenSize][inputSize + hiddenSize]
+	// Combined input and hidden weights for efficiency
+	ForgetWeights    [][]float64 // Forget gate weights
+	InputWeights     [][]float64 // Input gate weights
+	CandidateWeights [][]float64 // Candidate values weights
+	OutputWeights    [][]float64 // Output gate weights
+
+	// Gate biases: [hiddenSize]
+	ForgetBias    []float64 // Forget gate bias
+	InputBias     []float64 // Input gate bias
+	CandidateBias []float64 // Candidate values bias
+	OutputBias    []float64 // Output gate bias
+
+	// Activation function for gates (always sigmoid) and candidate (tanh)
+	// Note: LSTM uses fixed activations for mathematical stability
+
+	// Caches for backpropagation (future implementation)
+	InputCache     [][]float64 // Cached inputs [timestep][inputSize]
+	HiddenCache    [][]float64 // Cached hidden states [timestep+1][hiddenSize]
+	CellCache      [][]float64 // Cached cell states [timestep+1][hiddenSize]
+	ForgetCache    [][]float64 // Cached forget gate activations [timestep][hiddenSize]
+	InputCache2    [][]float64 // Cached input gate activations [timestep][hiddenSize]
+	CandidateCache [][]float64 // Cached candidate values [timestep][hiddenSize]
+	OutputCache    [][]float64 // Cached output gate activations [timestep][hiddenSize]
+}
+
+// NewLSTMCell creates a new LSTM cell with Xavier initialization
+// Mathematical: All gates use sigmoid activation, candidate uses tanh
+// Learning Goal: Understanding LSTM parameter initialization strategies
+func NewLSTMCell(inputSize, hiddenSize int) *LSTMCell {
+	lstm := &LSTMCell{
+		InputSize:  inputSize,
+		HiddenSize: hiddenSize,
+	}
+
+	// Xavier initialization for stability
+	// Mathematical: variance = 2 / (fan_in + fan_out)
+	fanIn := inputSize + hiddenSize
+	fanOut := hiddenSize
+	variance := 2.0 / float64(fanIn+fanOut)
+	stddev := math.Sqrt(variance)
+
+	// Initialize all gate weights
+	lstm.ForgetWeights = make([][]float64, hiddenSize)
+	lstm.InputWeights = make([][]float64, hiddenSize)
+	lstm.CandidateWeights = make([][]float64, hiddenSize)
+	lstm.OutputWeights = make([][]float64, hiddenSize)
+
+	for h := 0; h < hiddenSize; h++ {
+		// Each row has inputSize + hiddenSize weights
+		totalInputs := inputSize + hiddenSize
+
+		lstm.ForgetWeights[h] = make([]float64, totalInputs)
+		lstm.InputWeights[h] = make([]float64, totalInputs)
+		lstm.CandidateWeights[h] = make([]float64, totalInputs)
+		lstm.OutputWeights[h] = make([]float64, totalInputs)
+
+		for i := 0; i < totalInputs; i++ {
+			lstm.ForgetWeights[h][i] = rand.NormFloat64() * stddev    //nolint:gosec // Educational implementation
+			lstm.InputWeights[h][i] = rand.NormFloat64() * stddev     //nolint:gosec // Educational implementation
+			lstm.CandidateWeights[h][i] = rand.NormFloat64() * stddev //nolint:gosec // Educational implementation
+			lstm.OutputWeights[h][i] = rand.NormFloat64() * stddev    //nolint:gosec // Educational implementation
+		}
+	}
+
+	// Initialize biases
+	lstm.ForgetBias = make([]float64, hiddenSize)
+	lstm.InputBias = make([]float64, hiddenSize)
+	lstm.CandidateBias = make([]float64, hiddenSize)
+	lstm.OutputBias = make([]float64, hiddenSize)
+
+	// Forget gate bias initialized to 1.0 for better gradient flow
+	// Learning rationale: Initially allow information to pass through
+	for h := 0; h < hiddenSize; h++ {
+		lstm.ForgetBias[h] = 1.0    // Bias toward remembering
+		lstm.InputBias[h] = 0.0     // Neutral input gate
+		lstm.CandidateBias[h] = 0.0 // Neutral candidate
+		lstm.OutputBias[h] = 0.0    // Neutral output gate
+	}
+
+	return lstm
+}
+
+// Forward performs single timestep forward pass through LSTM cell
+// Mathematical Foundation: f_t = σ(W_f·[h_{t-1}, x_t] + b_f)
+//
+//	i_t = σ(W_i·[h_{t-1}, x_t] + b_i)
+//	C̃_t = tanh(W_C·[h_{t-1}, x_t] + b_C)
+//	C_t = f_t * C_{t-1} + i_t * C̃_t
+//	o_t = σ(W_o·[h_{t-1}, x_t] + b_o)
+//	h_t = o_t * tanh(C_t)
+//
+// Learning Goal: Understanding gate interactions and memory control
+func (lstm *LSTMCell) Forward(input, hiddenState, cellState []float64) ([]float64, []float64, error) {
+	if len(input) != lstm.InputSize {
+		return nil, nil, fmt.Errorf("input size mismatch: expected %d, got %d", lstm.InputSize, len(input))
+	}
+	if len(hiddenState) != lstm.HiddenSize {
+		return nil, nil, fmt.Errorf("hidden state size mismatch: expected %d, got %d", lstm.HiddenSize, len(hiddenState))
+	}
+	if len(cellState) != lstm.HiddenSize {
+		return nil, nil, fmt.Errorf("cell state size mismatch: expected %d, got %d", lstm.HiddenSize, len(cellState))
+	}
+
+	// Step 1: Concatenate input and hidden state
+	// Combined vector: [x_t, h_{t-1}]
+	combined := make([]float64, lstm.InputSize+lstm.HiddenSize)
+	copy(combined[:lstm.InputSize], input)
+	copy(combined[lstm.InputSize:], hiddenState)
+
+	// Step 2: Compute gate activations
+	forgetGate := make([]float64, lstm.HiddenSize)
+	inputGate := make([]float64, lstm.HiddenSize)
+	candidateValues := make([]float64, lstm.HiddenSize)
+	outputGate := make([]float64, lstm.HiddenSize)
+
+	for h := 0; h < lstm.HiddenSize; h++ {
+		// Forget gate: f_t = σ(W_f·[h_{t-1}, x_t] + b_f)
+		forgetSum := lstm.ForgetBias[h]
+		for i, val := range combined {
+			forgetSum += lstm.ForgetWeights[h][i] * val
+		}
+		forgetGate[h] = lstm.sigmoid(forgetSum)
+
+		// Input gate: i_t = σ(W_i·[h_{t-1}, x_t] + b_i)
+		inputSum := lstm.InputBias[h]
+		for i, val := range combined {
+			inputSum += lstm.InputWeights[h][i] * val
+		}
+		inputGate[h] = lstm.sigmoid(inputSum)
+
+		// Candidate values: C̃_t = tanh(W_C·[h_{t-1}, x_t] + b_C)
+		candidateSum := lstm.CandidateBias[h]
+		for i, val := range combined {
+			candidateSum += lstm.CandidateWeights[h][i] * val
+		}
+		candidateValues[h] = math.Tanh(candidateSum)
+
+		// Output gate: o_t = σ(W_o·[h_{t-1}, x_t] + b_o)
+		outputSum := lstm.OutputBias[h]
+		for i, val := range combined {
+			outputSum += lstm.OutputWeights[h][i] * val
+		}
+		outputGate[h] = lstm.sigmoid(outputSum)
+	}
+
+	// Step 3: Update cell state
+	// C_t = f_t * C_{t-1} + i_t * C̃_t
+	newCellState := make([]float64, lstm.HiddenSize)
+	for h := 0; h < lstm.HiddenSize; h++ {
+		newCellState[h] = forgetGate[h]*cellState[h] + inputGate[h]*candidateValues[h]
+	}
+
+	// Step 4: Compute new hidden state
+	// h_t = o_t * tanh(C_t)
+	newHiddenState := make([]float64, lstm.HiddenSize)
+	for h := 0; h < lstm.HiddenSize; h++ {
+		newHiddenState[h] = outputGate[h] * math.Tanh(newCellState[h])
+	}
+
+	return newHiddenState, newCellState, nil
+}
+
+// sigmoid computes the sigmoid activation function
+// Mathematical: σ(x) = 1 / (1 + e^(-x))
+// Learning Goal: Understanding sigmoid properties for gate control
+func (lstm *LSTMCell) sigmoid(x float64) float64 {
+	// Numerical stability: clamp extreme values
+	if x > 500 {
+		return 1.0
+	}
+	if x < -500 {
+		return 0.0
+	}
+	return 1.0 / (1.0 + math.Exp(-x))
+}
+
+// LSTM represents a complete LSTM network for sequence processing
+// Learning Goal: Understanding sequence-to-sequence learning with memory
+type LSTM struct {
+	Cell         *LSTMCell   // LSTM cell for timestep processing
+	OutputLayer  [][]float64 // Final output transformation [outputSize][hiddenSize]
+	OutputBias   []float64   // Output layer bias [outputSize]
+	OutputSize   int         // Number of output units
+	LearningRate float64     // Learning rate for training
+	InputShape   []int       // Shape of input sequences
+}
+
+// NewLSTM creates a new LSTM network
+// Learning Goal: Understanding LSTM architecture composition
+func NewLSTM(inputSize, hiddenSize, outputSize int, learningRate float64) *LSTM {
+	lstm := &LSTM{
+		Cell:         NewLSTMCell(inputSize, hiddenSize),
+		OutputSize:   outputSize,
+		LearningRate: learningRate,
+		InputShape:   []int{inputSize},
+	}
+
+	// Initialize output layer with Xavier initialization
+	fanIn := hiddenSize
+	fanOut := outputSize
+	variance := 2.0 / float64(fanIn+fanOut)
+	stddev := math.Sqrt(variance)
+
+	lstm.OutputLayer = make([][]float64, outputSize)
+	lstm.OutputBias = make([]float64, outputSize)
+	for o := 0; o < outputSize; o++ {
+		lstm.OutputLayer[o] = make([]float64, hiddenSize)
+		for h := 0; h < hiddenSize; h++ {
+			lstm.OutputLayer[o][h] = rand.NormFloat64() * stddev //nolint:gosec // Educational implementation
+		}
+		lstm.OutputBias[o] = 0.0
+	}
+
+	return lstm
+}
+
+// ForwardSequence processes an entire sequence through the LSTM
+// Mathematical Foundation: Temporal processing with memory preservation
+// Learning Goal: Understanding sequence modeling and hidden state evolution
+func (lstm *LSTM) ForwardSequence(sequence [][]float64) ([][]float64, error) {
+	if len(sequence) == 0 {
+		return nil, fmt.Errorf("empty sequence provided")
+	}
+
+	sequenceLength := len(sequence)
+	if len(sequence[0]) != lstm.Cell.InputSize {
+		return nil, fmt.Errorf("input size mismatch: expected %d, got %d",
+			lstm.Cell.InputSize, len(sequence[0]))
+	}
+
+	// Initialize caches for backpropagation
+	lstm.Cell.InputCache = make([][]float64, sequenceLength)
+	lstm.Cell.HiddenCache = make([][]float64, sequenceLength+1)
+	lstm.Cell.CellCache = make([][]float64, sequenceLength+1)
+	lstm.Cell.ForgetCache = make([][]float64, sequenceLength)
+	lstm.Cell.InputCache2 = make([][]float64, sequenceLength)
+	lstm.Cell.CandidateCache = make([][]float64, sequenceLength)
+	lstm.Cell.OutputCache = make([][]float64, sequenceLength)
+
+	// Initialize hidden and cell states to zero
+	hiddenState := make([]float64, lstm.Cell.HiddenSize)
+	cellState := make([]float64, lstm.Cell.HiddenSize)
+
+	// Cache initial states
+	lstm.Cell.HiddenCache[0] = make([]float64, len(hiddenState))
+	copy(lstm.Cell.HiddenCache[0], hiddenState)
+	lstm.Cell.CellCache[0] = make([]float64, len(cellState))
+	copy(lstm.Cell.CellCache[0], cellState)
+
+	outputs := make([][]float64, sequenceLength)
+
+	// Process each timestep
+	for t := 0; t < sequenceLength; t++ {
+		// Cache input
+		lstm.Cell.InputCache[t] = make([]float64, len(sequence[t]))
+		copy(lstm.Cell.InputCache[t], sequence[t])
+
+		// LSTM cell forward pass
+		nextHidden, nextCell, err := lstm.Cell.Forward(sequence[t], hiddenState, cellState)
+		if err != nil {
+			return nil, fmt.Errorf("LSTM forward failed at timestep %d: %w", t, err)
+		}
+
+		// Update states
+		hiddenState = nextHidden
+		cellState = nextCell
+
+		// Output layer transformation
+		output := make([]float64, lstm.OutputSize)
+		for o := 0; o < lstm.OutputSize; o++ {
+			sum := lstm.OutputBias[o]
+			for h := 0; h < lstm.Cell.HiddenSize; h++ {
+				sum += lstm.OutputLayer[o][h] * hiddenState[h]
+			}
+			output[o] = sum // No activation for output layer (can be added later)
+		}
+		outputs[t] = output
+
+		// Cache states for backpropagation
+		lstm.Cell.HiddenCache[t+1] = make([]float64, len(hiddenState))
+		copy(lstm.Cell.HiddenCache[t+1], hiddenState)
+		lstm.Cell.CellCache[t+1] = make([]float64, len(cellState))
+		copy(lstm.Cell.CellCache[t+1], cellState)
+	}
+
+	return outputs, nil
+}
+
+// Reset clears the LSTM internal state caches
+// Learning Goal: Understanding state management in recurrent networks
+func (lstm *LSTM) Reset() {
+	lstm.Cell.InputCache = nil
+	lstm.Cell.HiddenCache = nil
+	lstm.Cell.CellCache = nil
+	lstm.Cell.ForgetCache = nil
+	lstm.Cell.InputCache2 = nil
+	lstm.Cell.CandidateCache = nil
+	lstm.Cell.OutputCache = nil
+}
