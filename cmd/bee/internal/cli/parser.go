@@ -119,11 +119,16 @@ func (p *Parser) parseBenchmarkCommand() (*config.BenchmarkConfig, error) {
 		BaseConfig: config.BaseConfig{Command: "benchmark"},
 	}
 
-	flagSet.StringVar(&cfg.Model, "model", "perceptron", "Model type (perceptron, mlp, both)")
-	flagSet.StringVar(&cfg.Dataset, "dataset", "xor", "Dataset type (xor, and, or, all)")
+	flagSet.StringVar(&cfg.Model, "model", "perceptron", "Model type (perceptron, mlp, cnn, compare)")
+	flagSet.StringVar(&cfg.Dataset, "dataset", "xor", "Dataset type (xor, and, or, mnist, all)")
 	flagSet.IntVar(&cfg.Iterations, "iterations", 100, "Number of benchmark iterations")
 	flagSet.StringVar(&cfg.OutputPath, "output", "", "Output file for benchmark results (JSON)")
 	flagSet.StringVar(&cfg.MLPHidden, "mlp-hidden", "4", "Hidden layer sizes for MLP (comma-separated)")
+	// CNN-specific flags
+	flagSet.StringVar(&cfg.CNNArch, "cnn-arch", "MNIST", "CNN architecture (MNIST, CIFAR-10, Custom)")
+	flagSet.IntVar(&cfg.BatchSize, "batch-size", 32, "Batch size for CNN training")
+	flagSet.Float64Var(&cfg.LearningRate, "learning-rate", 0.001, "Learning rate for CNN training")
+	flagSet.IntVar(&cfg.Epochs, "epochs", 10, "Number of training epochs for CNN")
 	flagSet.BoolVar(&cfg.Verbose, "verbose", false, "Verbose output")
 
 	if err := flagSet.Parse(p.args[2:]); err != nil {

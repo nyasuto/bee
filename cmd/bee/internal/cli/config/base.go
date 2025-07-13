@@ -40,6 +40,11 @@ type BenchmarkConfig struct {
 	Iterations int
 	OutputPath string
 	MLPHidden  string
+	// CNN-specific configuration
+	CNNArch      string  // CNN architecture (MNIST, CIFAR-10, Custom)
+	BatchSize    int     // Batch size for CNN training
+	LearningRate float64 // Learning rate for CNN training
+	Epochs       int     // Number of training epochs for CNN
 }
 
 // CompareConfig contains configuration for the compare command
