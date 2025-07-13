@@ -578,9 +578,78 @@ func TestPrintEvaluationResults(t *testing.T) {
 	})
 }
 
-// TestCNNEvalEdgeCases tests various edge cases and error conditions for CNN evaluation
-func TestCNNEvalEdgeCases(t *testing.T) {
-	t.Run("TrainCNNWithoutInitialization", func(t *testing.T) {
+// TestTrainCNN tests the CNN training functionality and coverage
+func TestTrainCNN(t *testing.T) {
+	t.Run("SuccessfulTraining", func(t *testing.T) {
+		// Create a proper 4x4x1 test dataset
+		images := make([][][][]float64, 4)
+		labels := []int{0, 1, 0, 1}
+
+		// Create 4x4x1 test images with distinct patterns
+		for i := range images {
+			images[i] = make([][][]float64, 4)
+			for j := range images[i] {
+				images[i][j] = make([][]float64, 4)
+				for k := range images[i][j] {
+					// Create pattern: class 0 = low values, class 1 = high values
+					images[i][j][k] = []float64{float64(labels[i])*0.8 + 0.1}
+				}
+			}
+		}
+
+		dataset := &ImageDataset{
+			Name:     "TrainingDataset",
+			Images:   images,
+			Labels:   labels,
+			Classes:  []string{"0", "1"},
+			Width:    4,
+			Height:   4,
+			Channels: 1,
+		}
+
+		evaluator := NewCNNEvaluator(dataset, 0.1, 2, 3)
+
+		// Create a simple CNN for testing
+		conv := phase2.NewConvLayer(1, 2, 3, 1, 0, phase2.ReLU)
+		pool := phase2.NewPoolingLayer(2, 2, phase2.MaxPooling)
+		evaluator.CNN = &phase2.CNN{
+			ConvLayers:   []*phase2.ConvLayer{conv},
+			PoolLayers:   []*phase2.PoolingLayer{pool},
+			FCWeights:    [][]float64{{0.5, 0.3}, {-0.2, 0.8}}, // 2 features to 2 classes
+			FCBiases:     []float64{0.1, -0.1},
+			LearningRate: 0.1,
+			InputShape:   [3]int{4, 4, 1},
+			FlattenShape: [2]int{2, 2}, // After conv+pool: (4-3+1)/2 = 1, so 1x1x2 = 2 features
+		}
+
+		// Train the CNN
+		results, err := evaluator.TrainCNN()
+		if err != nil {
+			t.Fatalf("Training failed: %v", err)
+		}
+
+		// Verify results structure
+		if results == nil {
+			t.Fatal("Training results should not be nil")
+		}
+		if results.ModelName != "MNIST-CNN" {
+			t.Errorf("Expected model name 'MNIST-CNN', got %s", results.ModelName)
+		}
+		if results.DatasetName != "TrainingDataset" {
+			t.Errorf("Expected dataset name 'TrainingDataset', got %s", results.DatasetName)
+		}
+		if results.EpochsCompleted != 3 {
+			t.Errorf("Expected 3 epochs, got %d", results.EpochsCompleted)
+		}
+		if results.TrainingTime <= 0 {
+			t.Error("Training time should be positive")
+		}
+		if results.MemoryUsage <= 0 {
+			t.Error("Memory usage should be positive")
+		}
+	})
+
+	t.Run("TrainingWithoutCNN", func(t *testing.T) {
 		dataset := &ImageDataset{
 			Name:     "TestDataset",
 			Images:   make([][][][]float64, 1),
@@ -599,6 +668,93 @@ func TestCNNEvalEdgeCases(t *testing.T) {
 			t.Error("Expected error when training without CNN initialization")
 		}
 	})
+
+	t.Run("EmptyDatasetTraining", func(t *testing.T) {
+		emptyDataset := &ImageDataset{
+			Name:     "EmptyDataset",
+			Images:   [][][][]float64{},
+			Labels:   []int{},
+			Classes:  []string{},
+			Width:    1,
+			Height:   1,
+			Channels: 1,
+		}
+
+		evaluator := NewCNNEvaluator(emptyDataset, 0.01, 1, 1)
+		evaluator.CNN = &phase2.CNN{
+			ConvLayers:   []*phase2.ConvLayer{},
+			PoolLayers:   []*phase2.PoolingLayer{},
+			FCWeights:    [][]float64{{0.5}, {0.3}},
+			FCBiases:     []float64{0.1},
+			LearningRate: 0.01,
+			InputShape:   [3]int{1, 1, 1},
+			FlattenShape: [2]int{1, 1},
+		}
+
+		results, err := evaluator.TrainCNN()
+		if err != nil {
+			t.Fatalf("Training should handle empty dataset gracefully: %v", err)
+		}
+
+		// Should return valid results even for empty dataset
+		if results == nil {
+			t.Error("Results should not be nil for empty dataset")
+		}
+		if results.Accuracy != 0.0 {
+			t.Errorf("Expected 0 accuracy for empty dataset, got %f", results.Accuracy)
+		}
+	})
+
+	t.Run("VerboseTraining", func(t *testing.T) {
+		// Create minimal dataset
+		images := make([][][][]float64, 2)
+		for i := range images {
+			images[i] = make([][][]float64, 2)
+			for j := range images[i] {
+				images[i][j] = make([][]float64, 2)
+				for k := range images[i][j] {
+					images[i][j][k] = []float64{0.5}
+				}
+			}
+		}
+
+		dataset := &ImageDataset{
+			Name:     "VerboseTestDataset",
+			Images:   images,
+			Labels:   []int{0, 1},
+			Classes:  []string{"0", "1"},
+			Width:    2,
+			Height:   2,
+			Channels: 1,
+		}
+
+		evaluator := NewCNNEvaluator(dataset, 0.1, 1, 2)
+		evaluator.SetVerbose(true)
+
+		// Create simple CNN
+		evaluator.CNN = &phase2.CNN{
+			ConvLayers:   []*phase2.ConvLayer{},
+			PoolLayers:   []*phase2.PoolingLayer{},
+			FCWeights:    [][]float64{{0.5, 0.3, 0.1, 0.2}, {-0.2, 0.8, 0.4, -0.1}}, // 4 features (2x2x1), 2 classes
+			FCBiases:     []float64{0.1, -0.1},
+			LearningRate: 0.1,
+			InputShape:   [3]int{2, 2, 1},
+			FlattenShape: [2]int{4, 2},
+		}
+
+		// Training should work in verbose mode
+		results, err := evaluator.TrainCNN()
+		if err != nil {
+			t.Fatalf("Verbose training failed: %v", err)
+		}
+		if results == nil {
+			t.Error("Verbose training should return results")
+		}
+	})
+}
+
+// TestCNNEvalEdgeCases tests various edge cases and error conditions for CNN evaluation
+func TestCNNEvalEdgeCases(t *testing.T) {
 
 	t.Run("EvaluateAccuracyEmptyDataset", func(t *testing.T) {
 		emptyDataset := &ImageDataset{
@@ -644,6 +800,374 @@ func TestCNNEvalEdgeCases(t *testing.T) {
 
 		if inferenceTime != 0 {
 			t.Errorf("Expected 0 inference time for empty dataset, got %v", inferenceTime)
+		}
+	})
+}
+
+// TestEvaluateAccuracy tests the CNN accuracy evaluation functionality
+func TestEvaluateAccuracy(t *testing.T) {
+	t.Run("BasicAccuracyEvaluation", func(t *testing.T) {
+		// Create dataset with predictable patterns
+		images := make([][][][]float64, 4)
+		labels := []int{0, 1, 0, 1}
+
+		// Create 4x4x1 test images with clear class distinction
+		for i := range images {
+			images[i] = make([][][]float64, 4)
+			for j := range images[i] {
+				images[i][j] = make([][]float64, 4)
+				for k := range images[i][j] {
+					// Class 0: low values, Class 1: high values
+					images[i][j][k] = []float64{float64(labels[i])*0.9 + 0.05}
+				}
+			}
+		}
+
+		dataset := &ImageDataset{
+			Name:     "AccuracyTestDataset",
+			Images:   images,
+			Labels:   labels,
+			Classes:  []string{"0", "1"},
+			Width:    4,
+			Height:   4,
+			Channels: 1,
+		}
+
+		evaluator := NewCNNEvaluator(dataset, 0.01, 2, 1)
+
+		// Create a simple CNN that should learn the pattern
+		evaluator.CNN = &phase2.CNN{
+			ConvLayers:   []*phase2.ConvLayer{},
+			PoolLayers:   []*phase2.PoolingLayer{},
+			FCWeights:    [][]float64{{1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0}}, // 16 features (4x4x1), 2 classes
+			FCBiases:     []float64{-0.5, -0.5},                                                                                                                                                           // Bias toward negative (favoring first weight)
+			LearningRate: 0.01,
+			InputShape:   [3]int{4, 4, 1},
+			FlattenShape: [2]int{16, 2},
+		}
+
+		// Evaluate accuracy
+		accuracy, perClassAcc, confMatrix := evaluator.EvaluateAccuracy()
+
+		// Basic validation
+		if accuracy < 0 || accuracy > 1 {
+			t.Errorf("Accuracy should be between 0 and 1, got %f", accuracy)
+		}
+
+		// Per-class accuracy should have entries for each class
+		if len(perClassAcc) > 2 {
+			t.Errorf("Expected at most 2 classes in per-class accuracy, got %d", len(perClassAcc))
+		}
+
+		for class, acc := range perClassAcc {
+			if acc < 0 || acc > 1 {
+				t.Errorf("Per-class accuracy for class %d should be between 0 and 1, got %f", class, acc)
+			}
+		}
+
+		// Confusion matrix should be 2x2 for 2 classes
+		if len(confMatrix) != 2 {
+			t.Errorf("Expected 2x2 confusion matrix, got %dx%d", len(confMatrix), len(confMatrix))
+		} else {
+			for i, row := range confMatrix {
+				if len(row) != 2 {
+					t.Errorf("Confusion matrix row %d should have 2 elements, got %d", i, len(row))
+				}
+				for j, count := range row {
+					if count < 0 {
+						t.Errorf("Confusion matrix[%d][%d] should be non-negative, got %d", i, j, count)
+					}
+				}
+			}
+
+			// Check that confusion matrix sums to total samples
+			total := 0
+			for _, row := range confMatrix {
+				for _, count := range row {
+					total += count
+				}
+			}
+			if total != len(labels) {
+				t.Errorf("Confusion matrix should sum to %d samples, got %d", len(labels), total)
+			}
+		}
+	})
+
+	t.Run("AccuracyWithEmptyDataset", func(t *testing.T) {
+		emptyDataset := &ImageDataset{
+			Name:     "EmptyDataset",
+			Images:   [][][][]float64{},
+			Labels:   []int{},
+			Classes:  []string{},
+			Width:    1,
+			Height:   1,
+			Channels: 1,
+		}
+
+		evaluator := NewCNNEvaluator(emptyDataset, 0.01, 1, 1)
+		evaluator.CNN = &phase2.CNN{} // Minimal CNN
+
+		accuracy, perClassAcc, confMatrix := evaluator.EvaluateAccuracy()
+
+		// Empty dataset should return zero accuracy
+		if accuracy != 0.0 {
+			t.Errorf("Expected 0 accuracy for empty dataset, got %f", accuracy)
+		}
+		if len(perClassAcc) != 0 {
+			t.Errorf("Expected empty per-class accuracy, got %d entries", len(perClassAcc))
+		}
+		if len(confMatrix) != 0 {
+			t.Errorf("Expected empty confusion matrix, got %dx%d", len(confMatrix), len(confMatrix))
+		}
+	})
+
+	t.Run("AccuracyWithoutCNN", func(t *testing.T) {
+		// Create minimal dataset
+		images := make([][][][]float64, 1)
+		images[0] = make([][][]float64, 1)
+		images[0][0] = make([][]float64, 1)
+		images[0][0][0] = []float64{0.5}
+
+		dataset := &ImageDataset{
+			Name:     "TestDataset",
+			Images:   images,
+			Labels:   []int{0},
+			Classes:  []string{"0"},
+			Width:    1,
+			Height:   1,
+			Channels: 1,
+		}
+
+		evaluator := NewCNNEvaluator(dataset, 0.01, 1, 1)
+		// Set CNN to nil explicitly to test nil handling
+		evaluator.CNN = nil
+
+		accuracy, perClassAcc, confMatrix := evaluator.EvaluateAccuracy()
+
+		// Should handle missing CNN gracefully
+		if accuracy != 0.0 {
+			t.Errorf("Expected 0 accuracy without CNN, got %f", accuracy)
+		}
+		if len(perClassAcc) != 0 {
+			t.Errorf("Expected empty per-class accuracy without CNN, got %d entries", len(perClassAcc))
+		}
+		if len(confMatrix) != 0 {
+			t.Errorf("Expected empty confusion matrix without CNN, got %dx%d", len(confMatrix), len(confMatrix))
+		}
+	})
+
+	t.Run("SingleClassDataset", func(t *testing.T) {
+		// Create dataset with only one class
+		images := make([][][][]float64, 3)
+		labels := []int{0, 0, 0}
+
+		for i := range images {
+			images[i] = make([][][]float64, 2)
+			for j := range images[i] {
+				images[i][j] = make([][]float64, 2)
+				for k := range images[i][j] {
+					images[i][j][k] = []float64{0.3}
+				}
+			}
+		}
+
+		dataset := &ImageDataset{
+			Name:     "SingleClassDataset",
+			Images:   images,
+			Labels:   labels,
+			Classes:  []string{"0"},
+			Width:    2,
+			Height:   2,
+			Channels: 1,
+		}
+
+		evaluator := NewCNNEvaluator(dataset, 0.01, 1, 1)
+		evaluator.CNN = &phase2.CNN{
+			ConvLayers:   []*phase2.ConvLayer{},
+			PoolLayers:   []*phase2.PoolingLayer{},
+			FCWeights:    [][]float64{{1.0, 0.0, 0.0, 0.0}}, // 4 features (2x2x1), 1 class
+			FCBiases:     []float64{0.0},
+			LearningRate: 0.01,
+			InputShape:   [3]int{2, 2, 1},
+			FlattenShape: [2]int{4, 1},
+		}
+
+		accuracy, perClassAcc, confMatrix := evaluator.EvaluateAccuracy()
+
+		// Single class should have perfect accuracy
+		if accuracy != 1.0 {
+			t.Errorf("Expected perfect accuracy (1.0) for single class, got %f", accuracy)
+		}
+
+		// Should have one entry in per-class accuracy
+		if len(perClassAcc) != 1 {
+			t.Errorf("Expected 1 entry in per-class accuracy, got %d", len(perClassAcc))
+		}
+
+		// Confusion matrix should be 1x1
+		if len(confMatrix) != 1 || len(confMatrix[0]) != 1 {
+			t.Errorf("Expected 1x1 confusion matrix, got %dx%d", len(confMatrix), len(confMatrix[0]))
+		}
+		if confMatrix[0][0] != 3 {
+			t.Errorf("Expected confusion matrix[0][0] = 3, got %d", confMatrix[0][0])
+		}
+	})
+}
+
+// TestMeasureInferenceTime tests the inference time measurement functionality
+func TestMeasureInferenceTime(t *testing.T) {
+	t.Run("BasicInferenceTimeMeasurement", func(t *testing.T) {
+		// Create dataset with multiple samples
+		images := make([][][][]float64, 10)
+		labels := make([]int, 10)
+
+		for i := range images {
+			images[i] = make([][][]float64, 3)
+			for j := range images[i] {
+				images[i][j] = make([][]float64, 3)
+				for k := range images[i][j] {
+					images[i][j][k] = []float64{0.5}
+				}
+			}
+			labels[i] = i % 2
+		}
+
+		dataset := &ImageDataset{
+			Name:     "InferenceTestDataset",
+			Images:   images,
+			Labels:   labels,
+			Classes:  []string{"0", "1"},
+			Width:    3,
+			Height:   3,
+			Channels: 1,
+		}
+
+		evaluator := NewCNNEvaluator(dataset, 0.01, 5, 1)
+
+		// Create simple CNN
+		evaluator.CNN = &phase2.CNN{
+			ConvLayers:   []*phase2.ConvLayer{},
+			PoolLayers:   []*phase2.PoolingLayer{},
+			FCWeights:    [][]float64{{1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0}}, // 9 features (3x3x1), 2 classes
+			FCBiases:     []float64{0.0, 0.0},
+			LearningRate: 0.01,
+			InputShape:   [3]int{3, 3, 1},
+			FlattenShape: [2]int{9, 2},
+		}
+
+		// Measure inference time
+		inferenceTime := evaluator.measureInferenceTime()
+
+		// Should be a positive duration
+		if inferenceTime <= 0 {
+			t.Errorf("Expected positive inference time, got %v", inferenceTime)
+		}
+
+		// Should be reasonable (less than 1 second for simple test)
+		if inferenceTime > time.Second {
+			t.Errorf("Inference time seems too long: %v", inferenceTime)
+		}
+	})
+
+	t.Run("InferenceTimeWithEmptyDataset", func(t *testing.T) {
+		emptyDataset := &ImageDataset{
+			Name:     "EmptyDataset",
+			Images:   [][][][]float64{},
+			Labels:   []int{},
+			Classes:  []string{},
+			Width:    1,
+			Height:   1,
+			Channels: 1,
+		}
+
+		evaluator := NewCNNEvaluator(emptyDataset, 0.01, 1, 1)
+		evaluator.CNN = &phase2.CNN{} // Minimal CNN
+
+		inferenceTime := evaluator.measureInferenceTime()
+
+		// Empty dataset should return 0 inference time
+		if inferenceTime != 0 {
+			t.Errorf("Expected 0 inference time for empty dataset, got %v", inferenceTime)
+		}
+	})
+
+	t.Run("InferenceTimeWithoutCNN", func(t *testing.T) {
+		// Create minimal dataset
+		images := make([][][][]float64, 1)
+		images[0] = make([][][]float64, 1)
+		images[0][0] = make([][]float64, 1)
+		images[0][0][0] = []float64{0.5}
+
+		dataset := &ImageDataset{
+			Name:     "TestDataset",
+			Images:   images,
+			Labels:   []int{0},
+			Classes:  []string{"0"},
+			Width:    1,
+			Height:   1,
+			Channels: 1,
+		}
+
+		evaluator := NewCNNEvaluator(dataset, 0.01, 1, 1)
+		// Set CNN to nil explicitly to test nil handling
+		evaluator.CNN = nil
+
+		inferenceTime := evaluator.measureInferenceTime()
+
+		// Should handle missing CNN gracefully (return 0 or minimal time)
+		if inferenceTime < 0 {
+			t.Errorf("Inference time should not be negative, got %v", inferenceTime)
+		}
+	})
+
+	t.Run("InferenceTimeLargeBatch", func(t *testing.T) {
+		// Create larger dataset to test batch processing
+		images := make([][][][]float64, 150) // More than default sample size
+		labels := make([]int, 150)
+
+		for i := range images {
+			images[i] = make([][][]float64, 2)
+			for j := range images[i] {
+				images[i][j] = make([][]float64, 2)
+				for k := range images[i][j] {
+					images[i][j][k] = []float64{float64(i%10) * 0.1}
+				}
+			}
+			labels[i] = i % 3
+		}
+
+		dataset := &ImageDataset{
+			Name:     "LargeBatchDataset",
+			Images:   images,
+			Labels:   labels,
+			Classes:  []string{"0", "1", "2"},
+			Width:    2,
+			Height:   2,
+			Channels: 1,
+		}
+
+		evaluator := NewCNNEvaluator(dataset, 0.01, 10, 1)
+
+		// Create CNN for 3 classes
+		evaluator.CNN = &phase2.CNN{
+			ConvLayers:   []*phase2.ConvLayer{},
+			PoolLayers:   []*phase2.PoolingLayer{},
+			FCWeights:    [][]float64{{1.0, 0.0, 0.0, 0.0}, {0.0, 1.0, 0.0, 0.0}, {0.0, 0.0, 1.0, 0.0}}, // 4 features, 3 classes
+			FCBiases:     []float64{0.0, 0.0, 0.0},
+			LearningRate: 0.01,
+			InputShape:   [3]int{2, 2, 1},
+			FlattenShape: [2]int{4, 3},
+		}
+
+		// Measure inference time
+		inferenceTime := evaluator.measureInferenceTime()
+
+		// Should still be reasonable even with larger dataset
+		if inferenceTime <= 0 {
+			t.Errorf("Expected positive inference time, got %v", inferenceTime)
+		}
+		if inferenceTime > 5*time.Second {
+			t.Errorf("Inference time seems too long for large batch: %v", inferenceTime)
 		}
 	})
 }
