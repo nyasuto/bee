@@ -39,9 +39,8 @@ jobs:
         go test -v -race -coverprofile=coverage.out ./...
         
     - name: 🔍 Run linting
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v8
       with:
-        version: latest
         args: --timeout=5m
         
     - name: 💅 Check formatting
