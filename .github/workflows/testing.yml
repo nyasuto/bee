@@ -73,7 +73,7 @@ jobs:
         echo "- Memory allocations should be minimized (0 allocs/op preferred)" >> benchmark_results.md
         
     - name: 📤 Upload benchmark results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: benchmark-results
         path: benchmark_results.md
@@ -182,7 +182,7 @@ jobs:
         echo "- **Next Milestone**: Phase 1.1 (MLP with backpropagation)" >> integration_results.md
         
     - name: 📤 Upload integration results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: integration-test-results
         path: integration_results.md
@@ -257,7 +257,7 @@ jobs:
         echo "- Check for performance regressions in benchmarks" >> regression_results.md
         
     - name: 📤 Upload regression results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: regression-test-results
         path: regression_results.md
