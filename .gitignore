@@ -1,1 +1,139 @@
+# Claude Code
 .claude
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+/build/
+/dist/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+*.prof
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Dependency directories (remove the comment below to include it)
+vendor/
+
+# Go module proxy cache
+/go/pkg/mod/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Neural network specific files
+/models/*.json
+/models/*.pb
+/models/*.h5
+/models/*.pkl
+/checkpoints/
+/logs/
+/tensorboard/
+
+# Training and dataset files
+/datasets/*.csv
+/datasets/*.txt
+/datasets/*.json
+/data/
+/tmp/
+/temp/
+
+# Performance and profiling
+*.pprof
+*.mem
+*.cpu
+*.trace
+cpu.prof
+mem.prof
+mutex.prof
+block.prof
+
+# Coverage reports
+coverage.html
+coverage.out
+coverage.txt
+coverage.xml
+coverage.json
+
+# Benchmark results
+benchmark_results.txt
+benchmark_results.md
+bench_output.txt
+
+# CI/CD artifacts
+/artifacts/
+/reports/
+/test-results/
+validation_report.md
+integration_results.md
+regression_results.md
+ai_code_review.md
+issue_analysis.md
+progress_report.md
+
+# Environment and config files
+.env
+.env.local
+.env.*.local
+config.local.json
+config.local.yaml
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Archive files
+*.tar.gz
+*.zip
+*.7z
+*.rar
+
+# Temporary files
+*.tmp
+*.temp
+.temporary/
+
+# Node.js (for any potential frontend/docs)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python (if using Python tools for data preprocessing)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+
+# Documentation build
+/docs/_build/
+/docs/site/
