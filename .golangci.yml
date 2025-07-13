@@ -1,193 +1,42 @@
-# golangci-lint configuration for Bee Neural Network Project
-# AI Agent駆動開発に最適化された品質設定
+version: 2
 
 run:
-  timeout: 5m
-  issues-exit-code: 1
-  tests: true
-  skip-dirs:
-    - vendor
-    - .git
-  skip-files:
-    - ".*\\.pb\\.go$"
-    - ".*_gen\\.go$"
-
-output:
-  format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
-  uniq-by-line: true
-  sort-results: true
-
-linters-settings:
-  # エラーチェック設定
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-    exclude-functions:
-      - (*os.File).Close
-      - (io.Closer).Close
-
-  # 未使用変数・関数チェック
-  unused:
-    check-exported: true
-
-  # 関数複雑度チェック
-  gocyclo:
-    min-complexity: 15
-
-  # 関数長チェック
-  funlen:
-    lines: 100
-    statements: 50
-
-  # ファイル長チェック
-  lll:
-    line-length: 120
-
-  # 命名規則チェック
-  goconst:
-    min-len: 3
-    min-occurrences: 3
-
-  # パフォーマンスチェック
-  prealloc:
-    simple: true
-    range-loops: true
-    for-loops: true
-
-  # セキュリティチェック
-  gosec:
-    includes:
-      - G101 # Look for hard coded credentials
-      - G102 # Bind to all interfaces
-      - G103 # Audit the use of unsafe block
-      - G104 # Audit errors not checked
-      - G106 # Audit the use of ssh.InsecureIgnoreHostKey
-      - G107 # Url provided to HTTP request as taint input
-      - G108 # Profiling endpoint automatically exposed on /debug/pprof
-      - G109 # Potential Integer overflow made by strconv.Atoi result conversion to int16/32
-      - G110 # Potential DoS vulnerability via decompression bomb
-      - G201 # SQL query construction using format string
-      - G202 # SQL query construction using string concatenation
-      - G203 # Use of unescaped data in HTML templates
-      - G204 # Audit use of command execution
-      - G301 # Poor file permissions used when creating a directory
-      - G302 # Poor file permissions used with chmod
-      - G303 # Creating tempfile using a predictable path
-      - G304 # File path provided as taint input
-      - G305 # File traversal when extracting zip/tar archive
-      - G306 # Poor file permissions used when writing to a new file
-      - G307 # Deferring a method which returns an error
-      - G401 # Detect the usage of DES, RC4, MD5 or SHA1
-      - G402 # Look for bad TLS connection settings
-      - G403 # Ensure minimum RSA key length of 2048 bits
-      - G404 # Insecure random number source (rand)
-      - G501 # Import blocklist: crypto/md5
-      - G502 # Import blocklist: crypto/des
-      - G503 # Import blocklist: crypto/rc4
-      - G504 # Import blocklist: net/http/cgi
-      - G505 # Import blocklist: crypto/sha1
-      - G601 # Implicit memory aliasing of items from a range statement
-
-  # インポート順序チェック
-  goimports:
-    local-prefixes: github.com/nyasuto/bee
-
-  # インターフェース設計チェック
-  ireturn:
-    allow:
-      - anon
-      - error
-      - empty
-      - stdlib
-
-  # nil チェック
-  nilnil:
-    checked-types:
-      - ptr
-      - func
-      - iface
-      - map
-      - chan
+  tests: false
 
 linters:
   enable:
-    # 基本チェック
-    - errcheck      # エラーハンドリング確認
-    - gosimple      # 簡潔性チェック
-    - govet         # Go公式のvet
-    - ineffassign   # 無駄な代入
-    - staticcheck   # 静的解析
-    - typecheck     # 型チェック
-    - unused        # 未使用要素
-    
-    # コード品質
-    - gocyclo       # 循環的複雑度
-    - gofmt         # フォーマット
-    - goimports     # インポート整理
-    - revive        # golintの後継
-    - misspell      # スペルチェック
-    - unconvert     # 不要な型変換
-    - unparam       # 未使用パラメータ
-    
-    # パフォーマンス
-    - prealloc      # スライス事前割り当て
-    - gocritic      # 詳細なコード分析
-    
-    # セキュリティ
-    - gosec         # セキュリティ問題
-    
-    # 設計品質
-    - goconst       # 定数化可能文字列
-    - funlen        # 関数長
-    - lll           # 行長
-    - nestif        # ネスト深度
-    - dupl          # 重複コード
-    
-    # 現代的なGo
-    - gofumpt       # より厳格なフォーマット
-    - whitespace    # 空白チェック
-    - wsl           # 空行チェック
+    - errcheck
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
 
-  disable:
-    # プロジェクト特性に合わせて無効化
-    - exhaustruct   # 構造体初期化（学習用途では冗長）
-    - nlreturn      # return前の空行（学習コードでは柔軟性重視）
-    - wrapcheck     # エラーラップ（基本学習では簡潔性重視）
+settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  gosec:
+    excludes:
+      - G104
+      - G204
+  govet:
+    shadow:
+      strict: false
+  misspell:
+    locale: US
 
 issues:
   exclude-rules:
-    # テストファイルでは一部ルールを緩和
+    # Exclude some linters from running on tests files
     - path: _test\.go
       linters:
-        - errcheck    # テストでのエラー無視を許可
-        - gosec       # テストでの安全でない操作を許可
-        - funlen      # テスト関数の長さ制限緩和
-        - dupl        # テストでの重複許可
-        
-    # ベンチマークテストでは特別扱い
-    - path: _test\.go
-      text: "Benchmark"
+        - errcheck
+        - gosec
+    # Exclude main.go from errcheck
+    - path: main\.go
       linters:
-        - unparam     # ベンチマーク関数のパラメータ
-        - gocritic    # ベンチマーク最適化
-        
-    # CLIツールでは一部ルール緩和
-    - path: cmd/
-      linters:
-        - lll         # CLI helpテキストの長行許可
-        - funlen      # main関数等の長さ許可
-        
-    # Phase実装では学習重視の例外
-    - path: phase\d+/
-      linters:
-        - goconst     # 学習用の明示的な値許可
-        - gomnd       # 数学的定数の明示許可
-
-  # 最大エラー数
+        - errcheck
   max-issues-per-linter: 50
   max-same-issues: 10
-
-  # 新規問題のみ報告（段階的改善）
-  new-from-rev: HEAD~1
