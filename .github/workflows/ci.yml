@@ -54,7 +54,16 @@ jobs:
           exit 1
         fi
         
-    - name: 📊 Upload coverage
+    - name: 📊 Upload coverage to Codecov
+      if: success()
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+        
+    - name: 📊 Upload coverage artifact
       if: success()
       uses: actions/upload-artifact@v4
       with:
