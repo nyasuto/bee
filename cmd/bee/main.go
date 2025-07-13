@@ -608,13 +608,11 @@ func getDatasets(datasetType string) []benchmark.Dataset {
 		return []benchmark.Dataset{benchmark.CreateORDataset()}
 	case "all":
 		return benchmark.GetStandardDatasets()
+	case "linear":
+		return []benchmark.Dataset{benchmark.CreateLinearSeparableDataset(100, 42)}
+	case "nonlinear":
+		return []benchmark.Dataset{benchmark.CreateNonLinearDataset(200, 42)}
 	default:
-		// Try to match by name
-		if datasetType == "linear" {
-			return []benchmark.Dataset{benchmark.CreateLinearSeparableDataset(100, 42)}
-		} else if datasetType == "nonlinear" {
-			return []benchmark.Dataset{benchmark.CreateNonLinearDataset(200, 42)}
-		}
 		return []benchmark.Dataset{}
 	}
 }
@@ -644,7 +642,8 @@ func parseHiddenLayers(hiddenStr string) ([]int, error) {
 
 // printBenchmarkResults prints formatted benchmark results
 func printBenchmarkResults(metrics benchmark.PerformanceMetrics) {
-	fmt.Printf("🧠 %s Model Results:\n", strings.Title(metrics.ModelType))
+	modelType := strings.ToUpper(string(metrics.ModelType[0])) + metrics.ModelType[1:]
+	fmt.Printf("🧠 %s Model Results:\n", modelType)
 	fmt.Printf("   Dataset: %s\n", metrics.DatasetName)
 	fmt.Printf("   Accuracy: %.2f%%\n", metrics.Accuracy*100)
 	fmt.Printf("   Training Time: %s\n", benchmark.FormatDuration(metrics.TrainingTime))

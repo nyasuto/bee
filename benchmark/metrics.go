@@ -274,12 +274,12 @@ func LoadBenchmarkResult(filename string) (BenchmarkResult, error) {
 
 // writeFile and readFile are placeholder functions for file I/O
 // In real implementation, these would use os.WriteFile and os.ReadFile
-func writeFile(filename string, data []byte) error {
+func writeFile(_ string, _ []byte) error {
 	// Implementation would use os.WriteFile(filename, data, 0644)
 	return nil // Placeholder
 }
 
-func readFile(filename string) ([]byte, error) {
+func readFile(_ string) ([]byte, error) {
 	// Implementation would use os.ReadFile(filename)
 	return nil, nil // Placeholder
 }

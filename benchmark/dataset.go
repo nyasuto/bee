@@ -161,7 +161,7 @@ func CreateORDataset() Dataset {
 // CreateLinearSeparableDataset creates a linearly separable 2D classification dataset
 // Mathematical Foundation: Data points separated by a line
 func CreateLinearSeparableDataset(numSamples int, seed int64) Dataset {
-	rand.Seed(seed)
+	rand.Seed(seed) //nolint:staticcheck // Deterministic datasets for benchmarking
 
 	builder := NewDatasetBuilder("linear_separable").
 		WithDescription("Randomly generated linearly separable 2D classification problem")
@@ -169,8 +169,8 @@ func CreateLinearSeparableDataset(numSamples int, seed int64) Dataset {
 	// Define a separating line: y = 0.5*x + 0.3
 	// Points above the line are class 1, below are class 0
 	for i := 0; i < numSamples; i++ {
-		x1 := rand.Float64()*2 - 1 // Range [-1, 1]
-		x2 := rand.Float64()*2 - 1 // Range [-1, 1]
+		x1 := rand.Float64()*2 - 1 //nolint:gosec // Non-crypto random for benchmark data
+		x2 := rand.Float64()*2 - 1 //nolint:gosec // Non-crypto random for benchmark data
 
 		// Determine class based on line equation
 		separatingValue := 0.5*x1 + 0.3
@@ -198,7 +198,7 @@ func CreateLinearSeparableDataset(numSamples int, seed int64) Dataset {
 // CreateNonLinearDataset creates a non-linearly separable dataset
 // Mathematical Foundation: Circular decision boundary
 func CreateNonLinearDataset(numSamples int, seed int64) Dataset {
-	rand.Seed(seed)
+	rand.Seed(seed) //nolint:staticcheck // Deterministic datasets for benchmarking
 
 	builder := NewDatasetBuilder("non_linear").
 		WithDescription("Randomly generated non-linearly separable dataset with circular boundary")
@@ -206,8 +206,8 @@ func CreateNonLinearDataset(numSamples int, seed int64) Dataset {
 	// Circular decision boundary: x1² + x2² = 0.5
 	// Points inside circle are class 1, outside are class 0
 	for i := 0; i < numSamples; i++ {
-		x1 := rand.Float64()*2 - 1 // Range [-1, 1]
-		x2 := rand.Float64()*2 - 1 // Range [-1, 1]
+		x1 := rand.Float64()*2 - 1 //nolint:gosec // Non-crypto random for benchmark data
+		x2 := rand.Float64()*2 - 1 //nolint:gosec // Non-crypto random for benchmark data
 
 		// Calculate distance from origin
 		distanceSquared := x1*x1 + x2*x2
@@ -235,7 +235,7 @@ func CreateNonLinearDataset(numSamples int, seed int64) Dataset {
 // CreateSinusoidalDataset creates a sinusoidal regression dataset
 // Mathematical Foundation: y = sin(x) function approximation
 func CreateSinusoidalDataset(numSamples int, noiseLevel float64, seed int64) Dataset {
-	rand.Seed(seed)
+	rand.Seed(seed) //nolint:staticcheck // Deterministic datasets for benchmarking
 
 	builder := NewDatasetBuilder("sinusoidal").
 		WithDescription("Sinusoidal function approximation with optional noise")
@@ -247,7 +247,7 @@ func CreateSinusoidalDataset(numSamples int, noiseLevel float64, seed int64) Dat
 		// Calculate y = sin(x) with optional noise
 		y := math.Sin(x)
 		if noiseLevel > 0 {
-			noise := (rand.Float64()*2 - 1) * noiseLevel // Uniform noise [-noiseLevel, noiseLevel]
+			noise := (rand.Float64()*2 - 1) * noiseLevel //nolint:gosec // Non-crypto random for benchmark data
 			y += noise
 		}
 

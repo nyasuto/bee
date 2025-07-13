@@ -76,7 +76,10 @@ func (br *BenchmarkRunner) BenchmarkPerceptron(dataset Dataset) (PerformanceMetr
 		// Calculate epoch accuracy
 		correct := 0
 		for i := range dataset.TrainInputs {
-			output, _ := perceptron.Forward(dataset.TrainInputs[i])
+			output, err := perceptron.Forward(dataset.TrainInputs[i])
+			if err != nil {
+				continue // Skip failed predictions in benchmark
+			}
 			if (output >= 0.5 && dataset.TrainTargets[i][0] >= 0.5) ||
 				(output < 0.5 && dataset.TrainTargets[i][0] < 0.5) {
 				correct++
@@ -102,7 +105,20 @@ func (br *BenchmarkRunner) BenchmarkPerceptron(dataset Dataset) (PerformanceMetr
 	var memAfter runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&memAfter)
-	memoryUsage := int64(memAfter.Alloc - memBefore.Alloc)
+	// Safe conversion with overflow check
+	memoryUsage := int64(0)
+	if memAfter.Alloc >= memBefore.Alloc {
+		diff := memAfter.Alloc - memBefore.Alloc
+		if diff <= uint64(^uint64(0)>>1) { // Check if fits in int64
+			memoryUsage = int64(diff)
+		}
+	} else {
+		// Negative memory usage (memory was freed)
+		diff := memBefore.Alloc - memAfter.Alloc
+		if diff <= uint64(^uint64(0)>>1) {
+			memoryUsage = -int64(diff)
+		}
+	}
 
 	// Measure inference time (multiple runs for accuracy)
 	inferenceRuns := br.iterations
@@ -112,13 +128,13 @@ func (br *BenchmarkRunner) BenchmarkPerceptron(dataset Dataset) (PerformanceMetr
 
 	// Warmup runs
 	for i := 0; i < br.warmupRuns; i++ {
-		perceptron.Forward(dataset.TestInputs[0])
+		_, _ = perceptron.Forward(dataset.TestInputs[0]) //nolint:errcheck // Ignore errors in warmup
 	}
 
 	startInference := time.Now()
 	for i := 0; i < inferenceRuns; i++ {
 		for j := range dataset.TestInputs {
-			perceptron.Forward(dataset.TestInputs[j])
+			_, _ = perceptron.Forward(dataset.TestInputs[j]) //nolint:errcheck // Ignore errors in benchmark timing
 		}
 	}
 	totalInferenceTime := time.Since(startInference)
@@ -128,7 +144,10 @@ func (br *BenchmarkRunner) BenchmarkPerceptron(dataset Dataset) (PerformanceMetr
 	correct := 0
 	totalLoss := 0.0
 	for i := range dataset.TestInputs {
-		output, _ := perceptron.Forward(dataset.TestInputs[i])
+		output, err := perceptron.Forward(dataset.TestInputs[i])
+		if err != nil {
+			continue // Skip failed predictions
+		}
 		if (output >= 0.5 && dataset.TestTargets[i][0] >= 0.5) ||
 			(output < 0.5 && dataset.TestTargets[i][0] < 0.5) {
 			correct++
@@ -201,7 +220,10 @@ func (br *BenchmarkRunner) BenchmarkMLP(dataset Dataset, hiddenSizes []int) (Per
 		if epoch%50 == 0 || epoch == maxEpochs-1 {
 			correct := 0
 			for i := range dataset.TrainInputs {
-				output, _ := mlp.Predict(dataset.TrainInputs[i])
+				output, err := mlp.Predict(dataset.TrainInputs[i])
+				if err != nil {
+					continue // Skip failed predictions
+				}
 				predicted := 0.0
 				if len(output) == 1 {
 					if output[0] > 0.5 {
@@ -235,7 +257,20 @@ func (br *BenchmarkRunner) BenchmarkMLP(dataset Dataset, hiddenSizes []int) (Per
 	var memAfter runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&memAfter)
-	memoryUsage := int64(memAfter.Alloc - memBefore.Alloc)
+	// Safe conversion with overflow check
+	memoryUsage := int64(0)
+	if memAfter.Alloc >= memBefore.Alloc {
+		diff := memAfter.Alloc - memBefore.Alloc
+		if diff <= uint64(^uint64(0)>>1) { // Check if fits in int64
+			memoryUsage = int64(diff)
+		}
+	} else {
+		// Negative memory usage (memory was freed)
+		diff := memBefore.Alloc - memAfter.Alloc
+		if diff <= uint64(^uint64(0)>>1) {
+			memoryUsage = -int64(diff)
+		}
+	}
 
 	// Measure inference time
 	inferenceRuns := br.iterations
@@ -245,13 +280,13 @@ func (br *BenchmarkRunner) BenchmarkMLP(dataset Dataset, hiddenSizes []int) (Per
 
 	// Warmup runs
 	for i := 0; i < br.warmupRuns; i++ {
-		mlp.Predict(dataset.TestInputs[0])
+		_, _ = mlp.Predict(dataset.TestInputs[0]) //nolint:errcheck // Ignore errors in warmup
 	}
 
 	startInference := time.Now()
 	for i := 0; i < inferenceRuns; i++ {
 		for j := range dataset.TestInputs {
-			mlp.Predict(dataset.TestInputs[j])
+			_, _ = mlp.Predict(dataset.TestInputs[j]) //nolint:errcheck // Ignore errors in benchmark timing
 		}
 	}
 	totalInferenceTime := time.Since(startInference)
@@ -261,7 +296,10 @@ func (br *BenchmarkRunner) BenchmarkMLP(dataset Dataset, hiddenSizes []int) (Per
 	correct := 0
 	totalLoss := 0.0
 	for i := range dataset.TestInputs {
-		output, _ := mlp.Predict(dataset.TestInputs[i])
+		output, err := mlp.Predict(dataset.TestInputs[i])
+		if err != nil {
+			continue // Skip failed predictions
+		}
 
 		predicted := 0.0
 		if len(output) == 1 && output[0] > 0.5 {

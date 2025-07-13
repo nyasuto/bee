@@ -1,9 +1,15 @@
 package benchmark
 
 import (
+	"math"
 	"testing"
 	"time"
 )
+
+// abs returns the absolute value of a float64
+func abs(x float64) float64 {
+	return math.Abs(x)
+}
 
 // TestDatasetCreation tests standard dataset creation
 func TestDatasetCreation(t *testing.T) {
@@ -113,7 +119,7 @@ func TestPerformanceMetricsCalculation(t *testing.T) {
 	improvement := CalculateAccuracyImprovement(baselineAcc, comparisonAcc)
 	expectedImprovement := 20.0 // 20 percentage points
 
-	if improvement != expectedImprovement {
+	if abs(improvement-expectedImprovement) > 0.001 {
 		t.Errorf("Expected accuracy improvement %.2f%%, got %.2f%%", expectedImprovement, improvement)
 	}
 }
@@ -278,7 +284,7 @@ func TestMetricComparisons(t *testing.T) {
 	// Test accuracy comparison
 	if accuracyComp, exists := comparisons["accuracy"]; exists {
 		expectedImprovement := 20.0 // 20 percentage points
-		if accuracyComp.PercentChange != expectedImprovement {
+		if abs(accuracyComp.PercentChange-expectedImprovement) > 0.001 {
 			t.Errorf("Expected accuracy improvement of %.2f%%, got %.2f%%",
 				expectedImprovement, accuracyComp.PercentChange)
 		}
