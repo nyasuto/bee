@@ -7,16 +7,6 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "09:00"
-    open-pull-requests-limit: 5
-    assignees:
-      - "nyasuto"
-    commit-message:
-      prefix: "deps"
-      include: "scope"
-    labels:
-      - "dependencies"
-      - "go"
-      - "priority: low"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -25,13 +15,3 @@ updates:
       interval: "weekly"
       day: "monday" 
       time: "10:00"
-    open-pull-requests-limit: 3
-    assignees:
-      - "nyasuto"
-    commit-message:
-      prefix: "ci"
-      include: "scope"
-    labels:
-      - "dependencies"
-      - "ci/cd"
-      - "priority: medium"
