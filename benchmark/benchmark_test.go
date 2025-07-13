@@ -293,6 +293,446 @@ func TestMetricComparisons(t *testing.T) {
 	}
 }
 
+// TestCreateLinearSeparableDataset tests linear separable dataset creation
+func TestCreateLinearSeparableDataset(t *testing.T) {
+	dataset := CreateLinearSeparableDataset(100, 42)
+
+	// Validate dataset structure
+	if dataset.Name != "linear_separable" {
+		t.Errorf("Expected dataset name 'linear_separable', got '%s'", dataset.Name)
+	}
+
+	if dataset.InputSize != 2 {
+		t.Errorf("Expected input size 2, got %d", dataset.InputSize)
+	}
+
+	if dataset.OutputSize != 1 {
+		t.Errorf("Expected output size 1, got %d", dataset.OutputSize)
+	}
+
+	if dataset.TrainSize != 80 {
+		t.Errorf("Expected train size 80, got %d", dataset.TrainSize)
+	}
+
+	if dataset.TestSize != 20 {
+		t.Errorf("Expected test size 20, got %d", dataset.TestSize)
+	}
+
+	// Validate data structure
+	err := ValidateDataset(dataset)
+	if err != nil {
+		t.Fatalf("Dataset validation failed: %v", err)
+	}
+
+	// Check that data points are valid
+	for i, input := range dataset.TrainInputs {
+		if len(input) != 2 {
+			t.Errorf("Training input %d has wrong size: expected 2, got %d", i, len(input))
+		}
+	}
+
+	for i, target := range dataset.TrainTargets {
+		if len(target) != 1 {
+			t.Errorf("Training target %d has wrong size: expected 1, got %d", i, len(target))
+		}
+		if target[0] != 0 && target[0] != 1 {
+			t.Errorf("Training target %d has invalid value: expected 0 or 1, got %f", i, target[0])
+		}
+	}
+}
+
+// TestCreateNonLinearDataset tests non-linear dataset creation
+func TestCreateNonLinearDataset(t *testing.T) {
+	dataset := CreateNonLinearDataset(200, 42)
+
+	// Validate dataset structure
+	if dataset.Name != "non_linear" {
+		t.Errorf("Expected dataset name 'non_linear', got '%s'", dataset.Name)
+	}
+
+	if dataset.InputSize != 2 {
+		t.Errorf("Expected input size 2, got %d", dataset.InputSize)
+	}
+
+	if dataset.OutputSize != 1 {
+		t.Errorf("Expected output size 1, got %d", dataset.OutputSize)
+	}
+
+	if dataset.TrainSize != 160 {
+		t.Errorf("Expected train size 160, got %d", dataset.TrainSize)
+	}
+
+	if dataset.TestSize != 40 {
+		t.Errorf("Expected test size 40, got %d", dataset.TestSize)
+	}
+
+	// Validate data structure
+	err := ValidateDataset(dataset)
+	if err != nil {
+		t.Fatalf("Dataset validation failed: %v", err)
+	}
+
+	// Check that data points are valid
+	for i, input := range dataset.TrainInputs {
+		if len(input) != 2 {
+			t.Errorf("Training input %d has wrong size: expected 2, got %d", i, len(input))
+		}
+	}
+
+	for i, target := range dataset.TrainTargets {
+		if len(target) != 1 {
+			t.Errorf("Training target %d has wrong size: expected 1, got %d", i, len(target))
+		}
+		if target[0] != 0 && target[0] != 1 {
+			t.Errorf("Training target %d has invalid value: expected 0 or 1, got %f", i, target[0])
+		}
+	}
+}
+
+// TestCreateSinusoidalDataset tests sinusoidal dataset creation
+func TestCreateSinusoidalDataset(t *testing.T) {
+	dataset := CreateSinusoidalDataset(150, 0.1, 42)
+
+	// Validate dataset structure
+	if dataset.Name != "sinusoidal" {
+		t.Errorf("Expected dataset name 'sinusoidal', got '%s'", dataset.Name)
+	}
+
+	if dataset.InputSize != 1 {
+		t.Errorf("Expected input size 1, got %d", dataset.InputSize)
+	}
+
+	if dataset.OutputSize != 1 {
+		t.Errorf("Expected output size 1, got %d", dataset.OutputSize)
+	}
+
+	if dataset.TrainSize != 120 {
+		t.Errorf("Expected train size 120, got %d", dataset.TrainSize)
+	}
+
+	if dataset.TestSize != 30 {
+		t.Errorf("Expected test size 30, got %d", dataset.TestSize)
+	}
+
+	// Validate data structure
+	err := ValidateDataset(dataset)
+	if err != nil {
+		t.Fatalf("Dataset validation failed: %v", err)
+	}
+
+	// Check that targets are continuous values (not just 0/1)
+	hasNonBinaryTarget := false
+	for i, target := range dataset.TrainTargets {
+		if len(target) != 1 {
+			t.Errorf("Training target %d has wrong size: expected 1, got %d", i, len(target))
+		}
+		if target[0] != 0 && target[0] != 1 {
+			hasNonBinaryTarget = true
+		}
+	}
+	if !hasNonBinaryTarget {
+		t.Error("Sinusoidal dataset should have continuous target values, not just binary")
+	}
+}
+
+// TestGetStandardDatasets tests getting all standard datasets
+func TestGetStandardDatasets(t *testing.T) {
+	datasets := GetStandardDatasets()
+
+	// Should have 5 datasets: XOR, AND, OR, linear_separable, non_linear
+	expectedCount := 5
+	if len(datasets) != expectedCount {
+		t.Errorf("Expected %d datasets, got %d", expectedCount, len(datasets))
+	}
+
+	// Check that all datasets are valid
+	for i, dataset := range datasets {
+		err := ValidateDataset(dataset)
+		if err != nil {
+			t.Errorf("Dataset %d (%s) validation failed: %v", i, dataset.Name, err)
+		}
+	}
+
+	// Check that we have the expected dataset names
+	expectedNames := map[string]bool{
+		"xor":              true,
+		"and":              true,
+		"or":               true,
+		"linear_separable": true,
+		"non_linear":       true,
+	}
+
+	foundNames := make(map[string]bool)
+	for _, dataset := range datasets {
+		foundNames[dataset.Name] = true
+	}
+
+	for expectedName := range expectedNames {
+		if !foundNames[expectedName] {
+			t.Errorf("Expected dataset '%s' not found", expectedName)
+		}
+	}
+}
+
+// TestPrintDatasetInfo tests dataset info printing
+func TestPrintDatasetInfo(t *testing.T) {
+	dataset := CreateXORDataset()
+
+	// This function prints to stdout, so we can't easily test output
+	// But we can test that it doesn't panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("PrintDatasetInfo panicked: %v", r)
+		}
+	}()
+
+	PrintDatasetInfo(dataset)
+}
+
+// TestGetEnvironmentInfo tests environment info gathering
+func TestGetEnvironmentInfo(t *testing.T) {
+	envInfo := GetEnvironmentInfo()
+
+	// Check that we get some basic info
+	if envInfo.GoVersion == "" {
+		t.Error("Expected Go version to be set")
+	}
+
+	if envInfo.OS == "" {
+		t.Error("Expected OS to be set")
+	}
+
+	if envInfo.Architecture == "" {
+		t.Error("Expected architecture to be set")
+	}
+
+	if envInfo.CPUCores <= 0 {
+		t.Error("Expected positive number of CPU cores")
+	}
+}
+
+// TestFormatDuration tests duration formatting
+func TestFormatDuration(t *testing.T) {
+	testCases := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		{
+			name:     "Nanoseconds",
+			duration: 500 * time.Nanosecond,
+			expected: "500.00 ns",
+		},
+		{
+			name:     "Microseconds",
+			duration: 1500 * time.Nanosecond, // Less than 1 microsecond to test µs format
+			expected: "1.50 μs",
+		},
+		{
+			name:     "Milliseconds",
+			duration: 2500 * time.Microsecond, // Less than 1 second to test ms format
+			expected: "2.50 ms",
+		},
+		{
+			name:     "Seconds",
+			duration: 5 * time.Second,
+			expected: "5.00 s",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := FormatDuration(tc.duration)
+			if result != tc.expected {
+				t.Errorf("Expected '%s', got '%s'", tc.expected, result)
+			}
+		})
+	}
+}
+
+// TestFormatMemory tests memory formatting
+func TestFormatMemory(t *testing.T) {
+	testCases := []struct {
+		name     string
+		bytes    int64
+		expected string
+	}{
+		{
+			name:     "Bytes",
+			bytes:    512,
+			expected: "512 B",
+		},
+		{
+			name:     "Kilobytes",
+			bytes:    2048,
+			expected: "2.0 KB",
+		},
+		{
+			name:     "Megabytes",
+			bytes:    3 * 1024 * 1024,
+			expected: "3.0 MB",
+		},
+		{
+			name:     "Gigabytes",
+			bytes:    4 * 1024 * 1024 * 1024,
+			expected: "4.0 GB",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := FormatMemory(tc.bytes)
+			if result != tc.expected {
+				t.Errorf("Expected '%s', got '%s'", tc.expected, result)
+			}
+		})
+	}
+}
+
+// TestPrintComparisonSummary tests comparison summary printing
+func TestPrintComparisonSummary(t *testing.T) {
+	// Create a mock comparison report
+	baseline := PerformanceMetrics{
+		ModelType:    "perceptron",
+		DatasetName:  "xor",
+		Accuracy:     0.5,
+		TrainingTime: 100 * time.Millisecond,
+	}
+
+	comparison := PerformanceMetrics{
+		ModelType:    "mlp",
+		DatasetName:  "xor",
+		Accuracy:     0.9,
+		TrainingTime: 200 * time.Millisecond,
+	}
+
+	report := GenerateComparisonReport(baseline, comparison)
+
+	// This function prints to stdout, test that it doesn't panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("PrintComparisonSummary panicked: %v", r)
+		}
+	}()
+
+	PrintComparisonSummary(report)
+}
+
+// TestSaveBenchmarkResult tests saving benchmark results
+func TestSaveBenchmarkResult(t *testing.T) {
+	result := BenchmarkResult{
+		Metrics: PerformanceMetrics{
+			ModelType:       "perceptron",
+			DatasetName:     "test",
+			Accuracy:        0.8,
+			TrainingTime:    50 * time.Millisecond,
+			InferenceTime:   1 * time.Microsecond,
+			MemoryUsage:     1024,
+			ConvergenceRate: 100,
+			FinalLoss:       0.2,
+			Timestamp:       time.Now(),
+		},
+		Environment: GetEnvironmentInfo(),
+	}
+
+	// Test saving (currently returns no error as it's a placeholder)
+	filename := "test_benchmark.json"
+	err := SaveBenchmarkResult(result, filename)
+	if err != nil {
+		t.Fatalf("Failed to save benchmark result: %v", err)
+	}
+
+	// Note: Since writeFile is a placeholder, we just test that no error occurs
+}
+
+// TestLoadBenchmarkResult tests loading benchmark results
+func TestLoadBenchmarkResult(t *testing.T) {
+	// Test loading (currently readFile is a placeholder that returns empty data)
+	filename := "test_load_benchmark.json"
+
+	_, err := LoadBenchmarkResult(filename)
+	// Since readFile returns empty data, this should fail with a JSON error
+	if err == nil {
+		t.Error("Expected error when loading empty file, but got none")
+	}
+
+	// This is expected behavior since readFile is a placeholder
+	t.Logf("Expected error occurred: %v", err)
+}
+
+// TestRunComparison tests the comparison runner
+func TestRunComparison(t *testing.T) {
+	runner := NewBenchmarkRunner().
+		SetIterations(5). // Use fewer iterations for faster tests
+		SetVerbose(false)
+
+	dataset := CreateXORDataset()
+	hiddenLayers := []int{4}
+
+	report, err := runner.RunComparison(dataset, hiddenLayers)
+	if err != nil {
+		t.Fatalf("RunComparison failed: %v", err)
+	}
+
+	// Validate report structure
+	if report.BaselineModel != "perceptron" {
+		t.Errorf("Expected baseline model 'perceptron', got '%s'", report.BaselineModel)
+	}
+
+	if report.ComparisonModel != "mlp" {
+		t.Errorf("Expected comparison model 'mlp', got '%s'", report.ComparisonModel)
+	}
+
+	if report.Dataset != "xor" {
+		t.Errorf("Expected dataset 'xor', got '%s'", report.Dataset)
+	}
+
+	// Should have some improvements or degradations
+	if len(report.Improvements) == 0 && len(report.Degradations) == 0 {
+		t.Error("Expected some improvements or degradations in comparison report")
+	}
+}
+
+// TestRunMultipleComparisons tests running multiple comparisons
+func TestRunMultipleComparisons(t *testing.T) {
+	runner := NewBenchmarkRunner().
+		SetIterations(3). // Use fewer iterations for faster tests
+		SetVerbose(false)
+
+	datasets := []Dataset{
+		CreateXORDataset(),
+		CreateANDDataset(),
+	}
+	hiddenLayers := []int{4}
+
+	reports, err := runner.RunMultipleComparisons(datasets, hiddenLayers)
+	if err != nil {
+		t.Fatalf("RunMultipleComparisons failed: %v", err)
+	}
+
+	// Should have reports for both datasets
+	if len(reports) != 2 {
+		t.Errorf("Expected 2 reports, got %d", len(reports))
+	}
+
+	// Validate each report
+	expectedDatasets := map[string]bool{"xor": false, "and": false}
+	for _, report := range reports {
+		if _, exists := expectedDatasets[report.Dataset]; exists {
+			expectedDatasets[report.Dataset] = true
+		} else {
+			t.Errorf("Unexpected dataset in report: %s", report.Dataset)
+		}
+	}
+
+	// Check that all expected datasets were processed
+	for dataset, found := range expectedDatasets {
+		if !found {
+			t.Errorf("Missing report for dataset: %s", dataset)
+		}
+	}
+}
+
 // BenchmarkBenchmarkRunner benchmarks the benchmark runner itself
 func BenchmarkBenchmarkRunner(b *testing.B) {
 	runner := NewBenchmarkRunner().
