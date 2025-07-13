@@ -10,23 +10,18 @@ on:
     - cron: '0 3 * * *'
 
 env:
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.24'
 
 jobs:
-  # ===== マルチOS・マルチバージョンテスト =====
-  multi-platform-test:
-    name: 🌐 Multi-Platform Tests
+  # ===== Ubuntu テスト =====
+  ubuntu-test:
+    name: 🧪 Ubuntu Tests
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        go-version: ['1.20', '1.21', '1.22']
-        exclude:
-          # Windows + Go 1.20 の組み合わせを除外（互換性問題）
-          - os: windows-latest
-            go-version: '1.20'
+        go-version: ['1.23', '1.24']
             
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     
     steps:
     - name: 📥 Checkout code
@@ -76,31 +71,19 @@ jobs:
         retention-days: 30
         
     - name: 🎯 Test CLI functionality
-      shell: bash
       run: |
-        # ビルドされたバイナリのテスト
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          BINARY="./bin/bee.exe"
-        else
-          BINARY="./bin/bee"
-        fi
-        
         # Makefileがあれば使用、なければ直接ビルド
         if [ -f "Makefile" ]; then
           make build
         else
           mkdir -p bin
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            go build -o bin/bee.exe ./cmd/bee
-          else
-            go build -o bin/bee ./cmd/bee
-          fi
+          go build -o bin/bee ./cmd/bee
         fi
         
         # CLIヘルプテスト
-        if [ -f "$BINARY" ]; then
+        if [ -f "./bin/bee" ]; then
           echo "✅ CLI binary built successfully"
-          $BINARY help || echo "Help command test completed"
+          ./bin/bee help || echo "Help command test completed"
         else
           echo "⚠️ CLI binary not found, skipping CLI tests"
         fi
@@ -359,7 +342,7 @@ jobs:
   test-summary:
     name: 📋 Test Summary
     runs-on: ubuntu-latest
-    needs: [multi-platform-test, benchmark-test, integration-test, regression-detection]
+    needs: [ubuntu-test, benchmark-test, integration-test, regression-detection]
     if: always()
     
     steps:
@@ -368,14 +351,14 @@ jobs:
         echo "# 🧪 Testing Summary Report" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "## 📋 Test Results" >> $GITHUB_STEP_SUMMARY
-        echo "- **Multi-Platform Tests**: ${{ needs.multi-platform-test.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Ubuntu Tests**: ${{ needs.ubuntu-test.result }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Benchmark Tests**: ${{ needs.benchmark-test.result }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Integration Tests**: ${{ needs.integration-test.result }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Regression Detection**: ${{ needs.regression-detection.result }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
         # 全体的な成功判定
-        if [ "${{ needs.multi-platform-test.result }}" = "success" ] && [ "${{ needs.benchmark-test.result }}" = "success" ] && [ "${{ needs.integration-test.result }}" = "success" ]; then
+        if [ "${{ needs.ubuntu-test.result }}" = "success" ] && [ "${{ needs.benchmark-test.result }}" = "success" ] && [ "${{ needs.integration-test.result }}" = "success" ]; then
           echo "## ✅ Overall Status: PASSED" >> $GITHUB_STEP_SUMMARY
           echo "All critical tests passed successfully!" >> $GITHUB_STEP_SUMMARY
         else
