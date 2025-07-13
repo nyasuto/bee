@@ -9,6 +9,12 @@ import (
 	"math/rand"
 )
 
+// RandNormal returns a random number from standard normal distribution
+// Learning Goal: Understanding random initialization patterns
+func RandNormal() float64 {
+	return rand.NormFloat64() //nolint:gosec // Educational implementation, cryptographic randomness not required
+}
+
 // ActivationFunction represents different activation functions for CNN layers
 type ActivationFunction int
 
