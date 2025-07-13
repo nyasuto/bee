@@ -288,11 +288,21 @@ func testCommand(config CLIConfig) error {
 // CSV format: feature1,feature2,...,target
 // Learning Goal: Understanding data loading patterns
 func loadCSVData(filepath string) ([][]float64, []float64, error) {
+	// Validate file path to prevent directory traversal
+	if strings.Contains(filepath, "..") || strings.HasPrefix(filepath, "/") {
+		return nil, nil, fmt.Errorf("invalid file path: absolute paths and directory traversal not allowed")
+	}
+
+	// #nosec G304 - filepath is validated above to prevent directory traversal
 	file, err := os.Open(filepath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot open file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close file: %v\n", closeErr)
+		}
+	}()
 
 	reader := csv.NewReader(file)
 	var inputs [][]float64
@@ -364,7 +374,7 @@ func saveModel(perceptron *phase1.Perceptron, filepath string) error {
 	// Create directory if it doesn't exist
 	dir := filepath[:strings.LastIndex(filepath, "/")]
 	if dir != "" && dir != filepath {
-		err := os.MkdirAll(dir, 0755)
+		err := os.MkdirAll(dir, 0750)
 		if err != nil {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
@@ -375,7 +385,7 @@ func saveModel(perceptron *phase1.Perceptron, filepath string) error {
 		return fmt.Errorf("failed to serialize model: %w", err)
 	}
 
-	err = os.WriteFile(filepath, data, 0644)
+	err = os.WriteFile(filepath, data, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
@@ -385,6 +395,12 @@ func saveModel(perceptron *phase1.Perceptron, filepath string) error {
 
 // loadModel loads a perceptron model from JSON file
 func loadModel(filepath string) (*phase1.Perceptron, error) {
+	// Validate file path to prevent directory traversal
+	if strings.Contains(filepath, "..") || strings.HasPrefix(filepath, "/") {
+		return nil, fmt.Errorf("invalid file path: absolute paths and directory traversal not allowed")
+	}
+
+	// #nosec G304 - filepath is validated above to prevent directory traversal
 	data, err := os.ReadFile(filepath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)

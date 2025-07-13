@@ -6,15 +6,6 @@
 # Default target
 .DEFAULT_GOAL := help
 
-# Colors for output
-CYAN = \033[36m
-BLUE = \033[34m
-GREEN = \033[32m
-YELLOW = \033[33m
-RED = \033[31m
-PURPLE = \033[35m
-NC = \033[0m
-
 # Help target
 help: ## Show this help message
 	@echo "$(CYAN)🐝 Bee Neural Network Project - Development Commands$(NC)"
