@@ -306,6 +306,12 @@ func (eval *CNNEvaluator) EvaluateAccuracy() (float64, map[int]float64, [][]int)
 		return 0.0, make(map[int]float64), [][]int{}
 	}
 
+	// Check if CNN is available
+	if eval.CNN == nil {
+		// Return empty results if no CNN
+		return 0.0, make(map[int]float64), [][]int{}
+	}
+
 	correct := 0
 
 	// Per-class accuracy tracking
@@ -382,6 +388,11 @@ func (eval *CNNEvaluator) measureInferenceTime() time.Duration {
 		return 0
 	}
 
+	// Check if CNN is available
+	if eval.CNN == nil {
+		return 0
+	}
+
 	// Measure inference time on a subset of samples
 	sampleSize := 100
 	if len(eval.Dataset.Images) < sampleSize {
@@ -404,6 +415,11 @@ func (eval *CNNEvaluator) measureInferenceTime() time.Duration {
 // Learning Goal: Understanding memory requirements for neural networks
 func (eval *CNNEvaluator) estimateMemoryUsage() int64 {
 	var totalMemory int64
+
+	// Check if CNN is available
+	if eval.CNN == nil {
+		return 0
+	}
 
 	// Estimate convolution layer memory
 	for _, conv := range eval.CNN.ConvLayers {
