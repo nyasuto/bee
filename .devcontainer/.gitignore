@@ -1,6 +1,0 @@
-# DevContainer cache directories
-cache/
-*.log
-
-# Docker build cache
-.dockerignore

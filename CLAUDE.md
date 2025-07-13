@@ -77,9 +77,15 @@ bee/
 
 ```bash
 # Development Setup
-make setup          # Initial project setup
+make setup-native  # Complete native development environment setup
+make setup         # Basic project setup (dependencies + git hooks)
 make dev           # Start development environment
-make install       # Install dependencies
+make install       # Install Go dependencies
+
+# Tools and Environment
+make install-tools # Install Go development tools (golangci-lint, etc.)
+make verify-env    # Verify native development environment
+make env-info      # Show detailed environment information
 
 # Quality checks
 make quality       # Run all quality checks
