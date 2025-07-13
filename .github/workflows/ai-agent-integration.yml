@@ -257,7 +257,7 @@ jobs:
         
     - name: 💬 Comment on PR
       if: github.event_name == 'pull_request'
-      uses: actions/github-script@v6
+      uses: actions/github-script@v7
       with:
         script: |
           const fs = require('fs');
@@ -354,7 +354,7 @@ jobs:
         echo "- Consider breaking down into smaller tasks if complex" >> issue_analysis.md
         
     - name: 🏷️ Apply AI-suggested labels
-      uses: actions/github-script@v6
+      uses: actions/github-script@v7
       with:
         script: |
           const labels = [];
@@ -386,7 +386,7 @@ jobs:
           }
           
     - name: 💬 Comment with AI analysis
-      uses: actions/github-script@v6
+      uses: actions/github-script@v7
       with:
         script: |
           const fs = require('fs');
