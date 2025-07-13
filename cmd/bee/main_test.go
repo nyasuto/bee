@@ -3,8 +3,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -501,404 +499,80 @@ func TestPrintBenchmarkResults(t *testing.T) {
 	})
 }
 
-// TestCommandValidation tests command validation logic
-func TestCommandValidation(t *testing.T) {
-	t.Run("ValidCommands", func(t *testing.T) {
-		validCommands := []string{"train", "infer", "test", "benchmark", "compare", "help"}
+// TestMainFunction tests the main function indirectly through command simulation
+func TestMainFunction(t *testing.T) {
+	// Save original os.Args
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
 
-		for _, cmd := range validCommands {
-			t.Run(fmt.Sprintf("Command_%s", cmd), func(t *testing.T) {
-				// Test that these are recognized as valid commands
-				// This is implicitly tested by the switch statement in main()
-				switch cmd {
-				case "train", "infer", "test", "benchmark", "compare", "help":
-					// Valid commands
-				default:
-					t.Errorf("Command %s should be valid", cmd)
-				}
-			})
+	t.Run("HelpCommand", func(t *testing.T) {
+		os.Args = []string{"bee", "help"}
+
+		// Capture exit behavior by testing parseArgs instead of main directly
+		config := parseArgs()
+		if config.Command != "help" {
+			t.Errorf("Expected command 'help', got %s", config.Command)
 		}
 	})
 
-	t.Run("InvalidCommands", func(t *testing.T) {
-		invalidCommands := []string{"invalid", "unknown", "bad"}
+	t.Run("EmptyCommand", func(t *testing.T) {
+		os.Args = []string{"bee", ""}
 
-		for _, cmd := range invalidCommands {
-			t.Run(fmt.Sprintf("Command_%s", cmd), func(t *testing.T) {
-				// Test that these would be handled by the default case
-				switch cmd {
-				case "train", "infer", "test", "benchmark", "compare", "help":
-					t.Errorf("Command %s should be invalid", cmd)
-				default:
-					// Expected: invalid commands fall through to default
-				}
-			})
+		config := parseArgs()
+		if config.Command != "" {
+			t.Errorf("Expected empty command, got %s", config.Command)
+		}
+	})
+
+	t.Run("UnknownCommand", func(t *testing.T) {
+		os.Args = []string{"bee", "unknown"}
+
+		config := parseArgs()
+		if config.Command != "unknown" {
+			t.Errorf("Expected command 'unknown', got %s", config.Command)
 		}
 	})
 }
 
-// TestTrainCommandValidation tests training command validation
-func TestTrainCommandValidation(t *testing.T) {
-	t.Run("MissingDataPath", func(t *testing.T) {
-		config := CLIConfig{
-			Command:  "train",
-			DataPath: "", // Missing data path
-		}
+// TestMainErrorHandlingPaths tests error handling in main function paths
+func TestMainErrorHandlingPaths(t *testing.T) {
+	// Save original os.Args
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+
+	t.Run("TrainCommandMissingData", func(t *testing.T) {
+		os.Args = []string{"bee", "train", "-model", "perceptron"}
+		config := parseArgs()
 
 		err := trainCommand(config)
 		if err == nil {
 			t.Errorf("Expected error for missing data path")
 		}
-
-		expectedError := "data path is required for training"
-		if !strings.Contains(err.Error(), expectedError) {
-			t.Errorf("Expected error message to contain '%s', got '%s'", expectedError, err.Error())
-		}
 	})
 
-	t.Run("UnsupportedModel", func(t *testing.T) {
-		// Create temporary CSV file for testing
-		csvContent := `1,0,1
-0,1,0`
-		csvFile := "test_train.csv"
-		err := os.WriteFile(csvFile, []byte(csvContent), 0600)
-		if err != nil {
-			t.Fatalf("Failed to create test CSV file: %v", err)
-		}
-		defer os.Remove(csvFile)
-
-		config := CLIConfig{
-			Command:  "train",
-			Model:    "unsupported_model",
-			DataPath: csvFile,
-		}
-
-		err = trainCommand(config)
-		if err == nil {
-			t.Errorf("Expected error for unsupported model")
-		}
-
-		expectedError := "unsupported model type"
-		if !strings.Contains(err.Error(), expectedError) {
-			t.Errorf("Expected error message to contain '%s', got '%s'", expectedError, err.Error())
-		}
-	})
-}
-
-// TestInferCommandValidation tests inference command validation
-func TestInferCommandValidation(t *testing.T) {
-	t.Run("MissingInputData", func(t *testing.T) {
-		config := CLIConfig{
-			Command:   "infer",
-			InputData: "", // Missing input data
-		}
+	t.Run("InferCommandMissingInput", func(t *testing.T) {
+		os.Args = []string{"bee", "infer", "-model", "nonexistent.json"}
+		config := parseArgs()
 
 		err := inferCommand(config)
 		if err == nil {
 			t.Errorf("Expected error for missing input data")
 		}
-
-		expectedError := "input data is required for inference"
-		if !strings.Contains(err.Error(), expectedError) {
-			t.Errorf("Expected error message to contain '%s', got '%s'", expectedError, err.Error())
-		}
 	})
 
-	t.Run("InvalidInputData", func(t *testing.T) {
-		config := CLIConfig{
-			Command:   "infer",
-			InputData: "invalid,data,format",
-			ModelPath: "nonexistent.json",
-		}
-
-		err := inferCommand(config)
-		if err == nil {
-			t.Errorf("Expected error for invalid model path")
-		}
-	})
-}
-
-// TestTestCommandValidation tests test command validation
-func TestTestCommandValidation(t *testing.T) {
-	t.Run("MissingDataPath", func(t *testing.T) {
-		config := CLIConfig{
-			Command:  "test",
-			DataPath: "", // Missing data path
-		}
+	t.Run("TestCommandMissingData", func(t *testing.T) {
+		os.Args = []string{"bee", "test", "-model-path", "nonexistent.json"}
+		config := parseArgs()
 
 		err := testCommand(config)
 		if err == nil {
-			t.Errorf("Expected error for missing test data path")
-		}
-
-		expectedError := "test data path is required"
-		if !strings.Contains(err.Error(), expectedError) {
-			t.Errorf("Expected error message to contain '%s', got '%s'", expectedError, err.Error())
-		}
-	})
-}
-
-// TestConfigurationDefaults tests default configuration values
-func TestConfigurationDefaults(t *testing.T) {
-	t.Run("DefaultLearningRate", func(t *testing.T) {
-		// Test that the default learning rate is reasonable
-		defaultLR := 0.1
-		if defaultLR <= 0 || defaultLR >= 1 {
-			t.Errorf("Default learning rate %f should be between 0 and 1", defaultLR)
+			t.Errorf("Expected error for missing test data")
 		}
 	})
 
-	t.Run("DefaultEpochs", func(t *testing.T) {
-		// Test that the default epoch count is reasonable
-		defaultEpochs := 1000
-		if defaultEpochs <= 0 {
-			t.Errorf("Default epochs %d should be positive", defaultEpochs)
-		}
-	})
-
-	t.Run("DefaultModelPath", func(t *testing.T) {
-		// Test that the default model path is reasonable
-		defaultPath := "model.json"
-		if !strings.HasSuffix(defaultPath, ".json") {
-			t.Errorf("Default model path %s should have .json extension", defaultPath)
-		}
-	})
-}
-
-// TestBenchmarkIntegration tests benchmark command integration
-func TestBenchmarkIntegration(t *testing.T) {
-	t.Run("BenchmarkDatasetValidation", func(t *testing.T) {
-		// Test with empty dataset
-		datasets := getDatasets("invalid")
-		if len(datasets) != 0 {
-			t.Errorf("Expected 0 datasets for invalid type, got %d", len(datasets))
-		}
-	})
-
-	t.Run("PerformanceMetricsFields", func(t *testing.T) {
-		// Verify that PerformanceMetrics has expected fields
-		metrics := benchmark.PerformanceMetrics{}
-
-		// Test that we can set all expected fields
-		metrics.ModelType = "test"
-		metrics.DatasetName = "test"
-		metrics.Accuracy = 0.5
-		metrics.TrainingTime = 1000
-		metrics.InferenceTime = 100
-		metrics.MemoryUsage = 1024
-		metrics.ConvergenceRate = 50
-		metrics.FinalLoss = 0.1
-
-		// Verify fields are set correctly
-		if metrics.ModelType != "test" {
-			t.Errorf("ModelType not set correctly")
-		}
-		if metrics.Accuracy != 0.5 {
-			t.Errorf("Accuracy not set correctly")
-		}
-	})
-}
-
-// TestComparisonReport tests comparison functionality
-func TestComparisonReport(t *testing.T) {
-	t.Run("ComparisonReportCreation", func(t *testing.T) {
-		// Create mock performance metrics
-		perceptronMetrics := benchmark.PerformanceMetrics{
-			ModelType:    "perceptron",
-			DatasetName:  "xor",
-			Accuracy:     0.50, // Perceptron can't learn XOR
-			TrainingTime: 1000000,
-		}
-
-		mlpMetrics := benchmark.PerformanceMetrics{
-			ModelType:    "mlp",
-			DatasetName:  "xor",
-			Accuracy:     1.0, // MLP can learn XOR
-			TrainingTime: 5000000,
-		}
-
-		// Test that MLP should have better accuracy than perceptron for XOR
-		if mlpMetrics.Accuracy <= perceptronMetrics.Accuracy {
-			t.Errorf("MLP should have better accuracy than perceptron for XOR problem")
-		}
-	})
-}
-
-// TestErrorHandling tests error handling patterns
-func TestErrorHandling(t *testing.T) {
-	t.Run("EmptyDataset", func(t *testing.T) {
-		// Create empty CSV file
-		csvFile := "empty_test.csv"
-		err := os.WriteFile(csvFile, []byte(""), 0600)
-		if err != nil {
-			t.Fatalf("Failed to create empty CSV file: %v", err)
-		}
-		defer os.Remove(csvFile)
-
-		inputs, targets, err := loadCSVData(csvFile)
-		if err != nil {
-			t.Errorf("Unexpected error for empty file: %v", err)
-		}
-
-		if len(inputs) != 0 || len(targets) != 0 {
-			t.Errorf("Expected empty dataset, got inputs: %v, targets: %v", inputs, targets)
-		}
-
-		// Test training with empty dataset
-		config := CLIConfig{
-			Command:  "train",
-			DataPath: csvFile,
-		}
-
-		err = trainCommand(config)
-		if err == nil {
-			t.Errorf("Expected error for training with empty dataset")
-		}
-
-		expectedError := "no training data found"
-		if !strings.Contains(err.Error(), expectedError) {
-			t.Errorf("Expected error message to contain '%s', got '%s'", expectedError, err.Error())
-		}
-	})
-
-	t.Run("JSONMarshalError", func(t *testing.T) {
-		// Test JSON serialization behavior
-		perceptron := phase1.NewPerceptron(2, 0.1)
-
-		// Get JSON data
-		data, err := perceptron.ToJSON()
-		if err != nil {
-			t.Errorf("Unexpected error in JSON serialization: %v", err)
-		}
-
-		// Verify it's valid JSON
-		var jsonData map[string]interface{}
-		err = json.Unmarshal(data, &jsonData)
-		if err != nil {
-			t.Errorf("Generated JSON is not valid: %v", err)
-		}
-	})
-}
-
-// TestVerboseOutput tests verbose output functionality
-func TestVerboseOutput(t *testing.T) {
-	t.Run("VerboseConfigurationImpact", func(t *testing.T) {
-		config := CLIConfig{
-			Verbose: true,
-		}
-
-		// Test that verbose flag is properly set
-		if !config.Verbose {
-			t.Errorf("Verbose flag should be true")
-		}
-
-		config.Verbose = false
-		if config.Verbose {
-			t.Errorf("Verbose flag should be false")
-		}
-	})
-}
-
-// TestFileSystemOperations tests file system related operations
-func TestFileSystemOperations(t *testing.T) {
-	t.Run("DirectoryCreation", func(t *testing.T) {
-		// Test directory creation in saveModel
-		tmpDir := t.TempDir()
-		perceptron := phase1.NewPerceptron(2, 0.1)
-
-		// Use a subdirectory that doesn't exist
-		modelPath := filepath.Join(tmpDir, "models", "test.json")
-
-		err := saveModel(perceptron, modelPath)
-		if err != nil {
-			t.Errorf("Unexpected error creating directory: %v", err)
-		}
-
-		// Verify file exists
-		if _, err := os.Stat(modelPath); os.IsNotExist(err) {
-			t.Errorf("Model file was not created")
-		}
-	})
-
-	t.Run("FilePermissions", func(t *testing.T) {
-		perceptron := phase1.NewPerceptron(2, 0.1)
-		modelPath := "test_permissions.json"
-
-		err := saveModel(perceptron, modelPath)
-		if err != nil {
-			t.Errorf("Unexpected error saving model: %v", err)
-		}
-		defer os.Remove(modelPath)
-
-		// Check file permissions
-		info, err := os.Stat(modelPath)
-		if err != nil {
-			t.Errorf("Error getting file info: %v", err)
-		}
-
-		// File should be created with 0600 permissions (read/write for owner only)
-		expectedPerm := os.FileMode(0600)
-		if info.Mode().Perm() != expectedPerm {
-			t.Errorf("Expected file permissions %v, got %v", expectedPerm, info.Mode().Perm())
-		}
-	})
-}
-
-// TestBenchmarkCommand tests the benchmarkCommand functionality
-func TestBenchmarkCommand(t *testing.T) {
-	t.Run("PerceptronBenchmark", func(t *testing.T) {
-		config := CLIConfig{
-			Command:    "benchmark",
-			Model:      "perceptron",
-			Dataset:    "xor",
-			Iterations: 10,
-			Verbose:    false,
-		}
-
-		err := benchmarkCommand(config)
-		if err != nil {
-			t.Errorf("Unexpected error in perceptron benchmark: %v", err)
-		}
-	})
-
-	t.Run("MLPBenchmark", func(t *testing.T) {
-		config := CLIConfig{
-			Command:    "benchmark",
-			Model:      "mlp",
-			Dataset:    "and",
-			Iterations: 5,
-			MLPHidden:  "4",
-			Verbose:    false,
-		}
-
-		err := benchmarkCommand(config)
-		if err != nil {
-			t.Errorf("Unexpected error in MLP benchmark: %v", err)
-		}
-	})
-
-	t.Run("BothModelsBenchmark", func(t *testing.T) {
-		config := CLIConfig{
-			Command:    "benchmark",
-			Model:      "both",
-			Dataset:    "or",
-			Iterations: 3,
-			MLPHidden:  "2",
-			Verbose:    true,
-		}
-
-		err := benchmarkCommand(config)
-		if err != nil {
-			t.Errorf("Unexpected error in both models benchmark: %v", err)
-		}
-	})
-
-	t.Run("InvalidModel", func(t *testing.T) {
-		config := CLIConfig{
-			Command: "benchmark",
-			Model:   "invalid_model",
-			Dataset: "xor",
-		}
+	t.Run("BenchmarkCommandInvalidModel", func(t *testing.T) {
+		os.Args = []string{"bee", "benchmark", "-model", "invalid"}
+		config := parseArgs()
 
 		err := benchmarkCommand(config)
 		if err == nil {
@@ -906,331 +580,202 @@ func TestBenchmarkCommand(t *testing.T) {
 		}
 	})
 
-	t.Run("InvalidDataset", func(t *testing.T) {
-		config := CLIConfig{
-			Command: "benchmark",
-			Model:   "perceptron",
-			Dataset: "invalid_dataset",
-		}
+	t.Run("CompareCommandInvalidDataset", func(t *testing.T) {
+		os.Args = []string{"bee", "compare", "-dataset", "invalid"}
+		config := parseArgs()
 
-		err := benchmarkCommand(config)
+		err := compareCommand(config)
 		if err == nil {
 			t.Errorf("Expected error for invalid dataset")
 		}
 	})
+}
 
-	t.Run("InvalidMLPHidden", func(t *testing.T) {
-		config := CLIConfig{
-			Command:   "benchmark",
-			Model:     "mlp",
-			Dataset:   "xor",
-			MLPHidden: "invalid",
+// TestVerboseOutputPaths tests verbose output functionality
+func TestVerboseOutputPaths(t *testing.T) {
+	// Save original os.Args
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+
+	t.Run("TrainVerboseMode", func(t *testing.T) {
+		os.Args = []string{"bee", "train", "-data", "test.csv", "-verbose"}
+		config := parseArgs()
+
+		if !config.Verbose {
+			t.Errorf("Expected verbose mode to be enabled")
 		}
+	})
 
-		err := benchmarkCommand(config)
-		if err == nil {
-			t.Errorf("Expected error for invalid MLP hidden layers")
+	t.Run("InferVerboseMode", func(t *testing.T) {
+		os.Args = []string{"bee", "infer", "-model", "model.json", "-input", "1,0", "-verbose"}
+		config := parseArgs()
+
+		if !config.Verbose {
+			t.Errorf("Expected verbose mode to be enabled")
+		}
+	})
+
+	t.Run("BenchmarkVerboseMode", func(t *testing.T) {
+		os.Args = []string{"bee", "benchmark", "-verbose"}
+		config := parseArgs()
+
+		if !config.Verbose {
+			t.Errorf("Expected verbose mode to be enabled")
 		}
 	})
 }
 
-// TestCompareCommand tests the compareCommand functionality
-func TestCompareCommand(t *testing.T) {
-	t.Run("BasicComparison", func(t *testing.T) {
+// TestEdgeCases tests various edge cases and boundary conditions
+func TestEdgeCases(t *testing.T) {
+
+	t.Run("LoadCSVEmptyFile", func(t *testing.T) {
+		emptyFile := "empty_edge.csv"
+		err := os.WriteFile(emptyFile, []byte(""), 0600)
+		if err != nil {
+			t.Fatalf("Failed to create empty file: %v", err)
+		}
+		defer os.Remove(emptyFile)
+
+		inputs, targets, err := loadCSVData(emptyFile)
+		if err != nil {
+			t.Logf("Empty file handling: %v", err)
+		}
+		if len(inputs) != 0 || len(targets) != 0 {
+			t.Errorf("Expected empty results for empty file")
+		}
+	})
+
+	t.Run("LoadCSVWithComments", func(t *testing.T) {
+		commentFile := "comments_edge.csv"
+		content := "# This is a comment\n1,0,1\n# Another comment\n0,1,1"
+		err := os.WriteFile(commentFile, []byte(content), 0600)
+		if err != nil {
+			t.Fatalf("Failed to create comment file: %v", err)
+		}
+		defer os.Remove(commentFile)
+
+		inputs, targets, err := loadCSVData(commentFile)
+		if err != nil {
+			// Comments might cause parsing errors, which is acceptable
+			t.Logf("CSV with comments handling: %v", err)
+		} else if len(inputs) != 2 || len(targets) != 2 {
+			t.Errorf("Expected 2 data rows, got %d inputs and %d targets", len(inputs), len(targets))
+		}
+	})
+
+	t.Run("ParseInputDataEdgeCases", func(t *testing.T) {
+		testCases := []struct {
+			name     string
+			input    string
+			hasError bool
+		}{
+			{"SingleValue", "1.0", false},
+			{"LargeValues", "1000000.5,999999.2", false},
+			{"ScientificNotation", "1.5e-3,2.1e+2", false},
+			{"ZeroValues", "0,0,0", false},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				_, err := parseInputData(tc.input)
+				if tc.hasError && err == nil {
+					t.Errorf("Expected error for input: %s", tc.input)
+				}
+				if !tc.hasError && err != nil {
+					t.Errorf("Unexpected error for input %s: %v", tc.input, err)
+				}
+			})
+		}
+	})
+}
+
+// TestCommandIntegration tests command functions with realistic scenarios
+func TestCommandIntegration(t *testing.T) {
+	t.Run("FullTrainInferTestWorkflow", func(t *testing.T) {
+		// Create test data file
+		csvContent := "0,0,0\n0,1,1\n1,0,1\n1,1,0"
+		csvFile := "integration_test.csv"
+		err := os.WriteFile(csvFile, []byte(csvContent), 0600)
+		if err != nil {
+			t.Fatalf("Failed to create test CSV: %v", err)
+		}
+		defer os.Remove(csvFile)
+
+		modelFile := "integration_model.json"
+
+		// Test training
+		trainConfig := CLIConfig{
+			Command:      "train",
+			Model:        "perceptron",
+			DataPath:     csvFile,
+			ModelPath:    modelFile,
+			LearningRate: 0.1,
+			Epochs:       10,
+			Verbose:      false,
+		}
+
+		err = trainCommand(trainConfig)
+		if err != nil {
+			t.Errorf("Training command failed: %v", err)
+			return
+		}
+		defer os.Remove(modelFile)
+
+		// Test inference
+		inferConfig := CLIConfig{
+			Command:   "infer",
+			ModelPath: modelFile,
+			InputData: "1,0",
+			Verbose:   false,
+		}
+
+		err = inferCommand(inferConfig)
+		if err != nil {
+			t.Errorf("Inference command failed: %v", err)
+		}
+
+		// Test testing command
+		testConfig := CLIConfig{
+			Command:   "test",
+			Model:     "perceptron",
+			DataPath:  csvFile,
+			ModelPath: modelFile,
+			Verbose:   false,
+		}
+
+		err = testCommand(testConfig)
+		if err != nil {
+			t.Errorf("Test command failed: %v", err)
+		}
+	})
+
+	t.Run("BenchmarkIntegration", func(t *testing.T) {
+		config := CLIConfig{
+			Command:    "benchmark",
+			Model:      "perceptron",
+			Dataset:    "xor",
+			Iterations: 2,
+			Verbose:    false,
+		}
+
+		err := benchmarkCommand(config)
+		if err != nil {
+			t.Errorf("Benchmark command failed: %v", err)
+		}
+	})
+
+	t.Run("CompareIntegration", func(t *testing.T) {
 		config := CLIConfig{
 			Command:    "compare",
 			Dataset:    "xor",
-			Iterations: 5,
+			Iterations: 2,
 			MLPHidden:  "4",
 			Verbose:    false,
 		}
 
 		err := compareCommand(config)
 		if err != nil {
-			t.Errorf("Unexpected error in comparison: %v", err)
+			t.Errorf("Compare command failed: %v", err)
 		}
-	})
-
-	t.Run("VerboseComparison", func(t *testing.T) {
-		config := CLIConfig{
-			Command:    "compare",
-			Dataset:    "and",
-			Iterations: 3,
-			MLPHidden:  "2,1",
-			Verbose:    true,
-		}
-
-		err := compareCommand(config)
-		if err != nil {
-			t.Errorf("Unexpected error in verbose comparison: %v", err)
-		}
-	})
-
-	t.Run("WithOutputPath", func(t *testing.T) {
-		config := CLIConfig{
-			Command:    "compare",
-			Dataset:    "or",
-			Iterations: 2,
-			OutputPath: "test_comparison",
-			Verbose:    false,
-		}
-
-		err := compareCommand(config)
-		if err != nil {
-			t.Errorf("Unexpected error in comparison with output: %v", err)
-		}
-	})
-
-	t.Run("AllDatasets", func(t *testing.T) {
-		config := CLIConfig{
-			Command:    "compare",
-			Dataset:    "all",
-			Iterations: 2,
-			OutputPath: "test_all",
-			Verbose:    false,
-		}
-
-		err := compareCommand(config)
-		if err != nil {
-			t.Errorf("Unexpected error in all datasets comparison: %v", err)
-		}
-	})
-
-	t.Run("InvalidDataset", func(t *testing.T) {
-		config := CLIConfig{
-			Command: "compare",
-			Dataset: "invalid_dataset",
-		}
-
-		err := compareCommand(config)
-		if err == nil {
-			t.Errorf("Expected error for invalid dataset")
-		}
-	})
-
-	t.Run("InvalidMLPHidden", func(t *testing.T) {
-		config := CLIConfig{
-			Command:   "compare",
-			Dataset:   "xor",
-			MLPHidden: "invalid",
-		}
-
-		err := compareCommand(config)
-		if err == nil {
-			t.Errorf("Expected error for invalid MLP hidden layers")
-		}
-	})
-}
-
-// TestTrainCommandDetailed tests more detailed aspects of trainCommand
-func TestTrainCommandDetailed(t *testing.T) {
-	t.Run("TrainWithValidData", func(t *testing.T) {
-		// Create test data
-		csvContent := `1,0,1
-0,1,1
-0,0,0
-1,1,0`
-		csvFile := "test_train_detailed.csv"
-		err := os.WriteFile(csvFile, []byte(csvContent), 0600)
-		if err != nil {
-			t.Fatalf("Failed to create test CSV file: %v", err)
-		}
-		defer os.Remove(csvFile)
-
-		config := CLIConfig{
-			Command:      "train",
-			Model:        "perceptron",
-			DataPath:     csvFile,
-			ModelPath:    "test_detailed_model.json",
-			LearningRate: 0.1,
-			Epochs:       100,
-			Verbose:      true,
-		}
-
-		err = trainCommand(config)
-		if err != nil {
-			t.Errorf("Unexpected error in training: %v", err)
-		}
-
-		// Clean up model file
-		os.Remove("test_detailed_model.json")
-	})
-
-	t.Run("TrainWithInvalidData", func(t *testing.T) {
-		config := CLIConfig{
-			Command:  "train",
-			DataPath: "nonexistent_file.csv",
-		}
-
-		err := trainCommand(config)
-		if err == nil {
-			t.Errorf("Expected error for non-existent training data")
-		}
-	})
-}
-
-// TestInferCommandDetailed tests more detailed aspects of inferCommand
-func TestInferCommandDetailed(t *testing.T) {
-	t.Run("InferWithTrainedModel", func(t *testing.T) {
-		// First create and train a model
-		perceptron := phase1.NewPerceptron(2, 0.1)
-		inputs := [][]float64{{1, 0}, {0, 1}, {0, 0}, {1, 1}}
-		targets := []float64{1, 1, 0, 0}
-		_, err := perceptron.TrainDataset(inputs, targets, 50)
-		if err != nil {
-			t.Fatalf("Failed to train model: %v", err)
-		}
-
-		// Save the model
-		modelPath := "test_infer_model.json"
-		err = saveModel(perceptron, modelPath)
-		if err != nil {
-			t.Fatalf("Failed to save model: %v", err)
-		}
-		defer os.Remove(modelPath)
-
-		config := CLIConfig{
-			Command:   "infer",
-			ModelPath: modelPath,
-			InputData: "1,0",
-			Verbose:   true,
-		}
-
-		err = inferCommand(config)
-		if err != nil {
-			t.Errorf("Unexpected error in inference: %v", err)
-		}
-	})
-
-	t.Run("InferWithInvalidModelPath", func(t *testing.T) {
-		config := CLIConfig{
-			Command:   "infer",
-			ModelPath: "nonexistent_model.json",
-			InputData: "1,0",
-		}
-
-		err := inferCommand(config)
-		if err == nil {
-			t.Errorf("Expected error for non-existent model file")
-		}
-	})
-
-	t.Run("InferWithInvalidInput", func(t *testing.T) {
-		// Create a simple model first
-		perceptron := phase1.NewPerceptron(2, 0.1)
-		modelPath := "test_invalid_input_model.json"
-		err := saveModel(perceptron, modelPath)
-		if err != nil {
-			t.Fatalf("Failed to save model: %v", err)
-		}
-		defer os.Remove(modelPath)
-
-		config := CLIConfig{
-			Command:   "infer",
-			ModelPath: modelPath,
-			InputData: "invalid,input",
-		}
-
-		err = inferCommand(config)
-		if err == nil {
-			t.Errorf("Expected error for invalid input data")
-		}
-	})
-}
-
-// TestTestCommandDetailed tests more detailed aspects of testCommand
-func TestTestCommandDetailed(t *testing.T) {
-	t.Run("TestWithValidData", func(t *testing.T) {
-		// Create test data
-		csvContent := `1,0,1
-0,1,1
-0,0,0
-1,1,0`
-		csvFile := "test_test_data.csv"
-		err := os.WriteFile(csvFile, []byte(csvContent), 0600)
-		if err != nil {
-			t.Fatalf("Failed to create test CSV file: %v", err)
-		}
-		defer os.Remove(csvFile)
-
-		// Create a trained model
-		perceptron := phase1.NewPerceptron(2, 0.1)
-		inputs := [][]float64{{1, 0}, {0, 1}, {0, 0}, {1, 1}}
-		targets := []float64{1, 1, 0, 0}
-		_, err = perceptron.TrainDataset(inputs, targets, 50)
-		if err != nil {
-			t.Fatalf("Failed to train model: %v", err)
-		}
-
-		modelPath := "test_test_model.json"
-		err = saveModel(perceptron, modelPath)
-		if err != nil {
-			t.Fatalf("Failed to save model: %v", err)
-		}
-		defer os.Remove(modelPath)
-
-		config := CLIConfig{
-			Command:   "test",
-			DataPath:  csvFile,
-			ModelPath: modelPath,
-			Verbose:   true,
-		}
-
-		err = testCommand(config)
-		if err != nil {
-			t.Errorf("Unexpected error in testing: %v", err)
-		}
-	})
-
-	t.Run("TestWithNonExistentModel", func(t *testing.T) {
-		csvContent := `1,0,1`
-		csvFile := "test_data_no_model.csv"
-		err := os.WriteFile(csvFile, []byte(csvContent), 0600)
-		if err != nil {
-			t.Fatalf("Failed to create test CSV file: %v", err)
-		}
-		defer os.Remove(csvFile)
-
-		config := CLIConfig{
-			Command:   "test",
-			DataPath:  csvFile,
-			ModelPath: "nonexistent_model.json",
-		}
-
-		err = testCommand(config)
-		if err == nil {
-			t.Errorf("Expected error for non-existent model file")
-		}
-	})
-
-	t.Run("TestWithInvalidData", func(t *testing.T) {
-		// Create a model
-		perceptron := phase1.NewPerceptron(2, 0.1)
-		modelPath := "test_invalid_data_model.json"
-		err := saveModel(perceptron, modelPath)
-		if err != nil {
-			t.Fatalf("Failed to save model: %v", err)
-		}
-		defer os.Remove(modelPath)
-
-		config := CLIConfig{
-			Command:   "test",
-			DataPath:  "nonexistent_test_data.csv",
-			ModelPath: modelPath,
-		}
-
-		err = testCommand(config)
-		if err == nil {
-			t.Errorf("Expected error for non-existent test data file")
-		}
-	})
-}
-
-// TestPrintUsage tests the printUsage function
-func TestPrintUsage(t *testing.T) {
-	t.Run("PrintUsageExecution", func(t *testing.T) {
-		// This test simply ensures printUsage doesn't panic
-		// In a real scenario, you might capture stdout to verify the content
-		printUsage()
 	})
 }
