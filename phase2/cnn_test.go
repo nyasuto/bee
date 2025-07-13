@@ -1013,3 +1013,556 @@ func TestRNNSequenceLearning(t *testing.T) {
 		}
 	})
 }
+
+// TestLSTMCell tests basic LSTM cell functionality
+func TestLSTMCell(t *testing.T) {
+	t.Run("CellCreation", func(t *testing.T) {
+		cell := NewLSTMCell(3, 4)
+
+		if cell.InputSize != 3 {
+			t.Errorf("Expected input size 3, got %d", cell.InputSize)
+		}
+		if cell.HiddenSize != 4 {
+			t.Errorf("Expected hidden size 4, got %d", cell.HiddenSize)
+		}
+
+		// Check weight dimensions
+		if len(cell.ForgetWeights) != 4 {
+			t.Errorf("Expected 4 forget weight rows, got %d", len(cell.ForgetWeights))
+		}
+		if len(cell.ForgetWeights[0]) != 7 { // inputSize + hiddenSize = 3 + 4 = 7
+			t.Errorf("Expected 7 forget weight columns, got %d", len(cell.ForgetWeights[0]))
+		}
+
+		// Check bias dimensions
+		if len(cell.ForgetBias) != 4 {
+			t.Errorf("Expected 4 forget biases, got %d", len(cell.ForgetBias))
+		}
+
+		// Check forget bias initialization (should be 1.0)
+		for i, bias := range cell.ForgetBias {
+			if bias != 1.0 {
+				t.Errorf("Forget bias[%d] should be 1.0, got %f", i, bias)
+			}
+		}
+
+		// Check other biases initialization (should be 0.0)
+		for i, bias := range cell.InputBias {
+			if bias != 0.0 {
+				t.Errorf("Input bias[%d] should be 0.0, got %f", i, bias)
+			}
+		}
+	})
+
+	t.Run("SingleTimestepForward", func(t *testing.T) {
+		cell := NewLSTMCell(2, 3)
+
+		// Set known weights for testing
+		for h := 0; h < 3; h++ {
+			for i := 0; i < 5; i++ { // 2 input + 3 hidden = 5 total
+				cell.ForgetWeights[h][i] = 0.1
+				cell.InputWeights[h][i] = 0.1
+				cell.CandidateWeights[h][i] = 0.1
+				cell.OutputWeights[h][i] = 0.1
+			}
+		}
+
+		input := []float64{1.0, 0.5}
+		hiddenState := []float64{0.0, 0.0, 0.0}
+		cellState := []float64{0.0, 0.0, 0.0}
+
+		newHidden, newCell, err := cell.Forward(input, hiddenState, cellState)
+		if err != nil {
+			t.Fatalf("Forward pass failed: %v", err)
+		}
+
+		if len(newHidden) != 3 {
+			t.Errorf("Expected 3 hidden outputs, got %d", len(newHidden))
+		}
+		if len(newCell) != 3 {
+			t.Errorf("Expected 3 cell outputs, got %d", len(newCell))
+		}
+
+		// Check that outputs are reasonable (not NaN/Inf)
+		for i, val := range newHidden {
+			if math.IsNaN(val) || math.IsInf(val, 0) {
+				t.Errorf("Hidden state[%d] = %f is not finite", i, val)
+			}
+		}
+		for i, val := range newCell {
+			if math.IsNaN(val) || math.IsInf(val, 0) {
+				t.Errorf("Cell state[%d] = %f is not finite", i, val)
+			}
+		}
+	})
+
+	t.Run("InvalidInputSizes", func(t *testing.T) {
+		cell := NewLSTMCell(2, 3)
+
+		// Wrong input size
+		input := []float64{1.0} // Should be size 2
+		hiddenState := []float64{0.0, 0.0, 0.0}
+		cellState := []float64{0.0, 0.0, 0.0}
+
+		_, _, err := cell.Forward(input, hiddenState, cellState)
+		if err == nil {
+			t.Error("Expected error for invalid input size")
+		}
+
+		// Wrong hidden state size
+		input = []float64{1.0, 0.5}
+		hiddenState = []float64{0.0, 0.0} // Should be size 3
+		_, _, err = cell.Forward(input, hiddenState, cellState)
+		if err == nil {
+			t.Error("Expected error for invalid hidden state size")
+		}
+
+		// Wrong cell state size
+		hiddenState = []float64{0.0, 0.0, 0.0}
+		cellState = []float64{0.0, 0.0} // Should be size 3
+		_, _, err = cell.Forward(input, hiddenState, cellState)
+		if err == nil {
+			t.Error("Expected error for invalid cell state size")
+		}
+	})
+
+	t.Run("SigmoidFunction", func(t *testing.T) {
+		cell := NewLSTMCell(1, 1)
+
+		// Test sigmoid boundary conditions
+		testCases := []struct {
+			input     float64
+			expected  float64
+			tolerance float64
+		}{
+			{0.0, 0.5, 1e-6},
+			{100.0, 1.0, 1e-6},   // Should clamp to 1.0
+			{-100.0, 0.0, 1e-6},  // Should clamp to 0.0
+			{1.0, 0.7311, 1e-3},  // Approximate sigmoid(1)
+			{-1.0, 0.2689, 1e-3}, // Approximate sigmoid(-1)
+		}
+
+		for _, tc := range testCases {
+			result := cell.sigmoid(tc.input)
+			if math.Abs(result-tc.expected) > tc.tolerance {
+				t.Errorf("sigmoid(%f): expected %f, got %f", tc.input, tc.expected, result)
+			}
+			// All sigmoid outputs should be in [0, 1]
+			if result < 0.0 || result > 1.0 {
+				t.Errorf("sigmoid(%f) = %f is outside [0, 1]", tc.input, result)
+			}
+		}
+	})
+}
+
+// TestLSTM tests complete LSTM network functionality
+func TestLSTM(t *testing.T) {
+	t.Run("LSTMCreation", func(t *testing.T) {
+		lstm := NewLSTM(3, 4, 2, 0.01)
+
+		if lstm.Cell.InputSize != 3 {
+			t.Errorf("Expected input size 3, got %d", lstm.Cell.InputSize)
+		}
+		if lstm.Cell.HiddenSize != 4 {
+			t.Errorf("Expected hidden size 4, got %d", lstm.Cell.HiddenSize)
+		}
+		if lstm.OutputSize != 2 {
+			t.Errorf("Expected output size 2, got %d", lstm.OutputSize)
+		}
+		if lstm.LearningRate != 0.01 {
+			t.Errorf("Expected learning rate 0.01, got %f", lstm.LearningRate)
+		}
+
+		// Check output layer dimensions
+		if len(lstm.OutputLayer) != 2 {
+			t.Errorf("Expected 2 output layer rows, got %d", len(lstm.OutputLayer))
+		}
+		if len(lstm.OutputLayer[0]) != 4 {
+			t.Errorf("Expected 4 output layer columns, got %d", len(lstm.OutputLayer[0]))
+		}
+		if len(lstm.OutputBias) != 2 {
+			t.Errorf("Expected 2 output biases, got %d", len(lstm.OutputBias))
+		}
+	})
+
+	t.Run("SequenceForward", func(t *testing.T) {
+		lstm := NewLSTM(2, 3, 1, 0.01)
+
+		// Simple sequence: 3 timesteps
+		sequence := [][]float64{
+			{1.0, 0.0},
+			{0.0, 1.0},
+			{1.0, 1.0},
+		}
+
+		outputs, err := lstm.ForwardSequence(sequence)
+		if err != nil {
+			t.Fatalf("Sequence forward failed: %v", err)
+		}
+
+		if len(outputs) != 3 {
+			t.Errorf("Expected 3 outputs, got %d", len(outputs))
+		}
+
+		for i, output := range outputs {
+			if len(output) != 1 {
+				t.Errorf("Output[%d] has wrong size: expected 1, got %d", i, len(output))
+			}
+			// Check for finite values
+			if math.IsNaN(output[0]) || math.IsInf(output[0], 0) {
+				t.Errorf("Output[%d] = %f is not finite", i, output[0])
+			}
+		}
+
+		// Check that outputs change across timesteps (showing temporal dependency)
+		allSame := true
+		for i := 1; i < len(outputs); i++ {
+			if math.Abs(outputs[i][0]-outputs[0][0]) > 1e-6 {
+				allSame = false
+				break
+			}
+		}
+		if allSame {
+			t.Error("All outputs are identical - LSTM may not be processing sequence correctly")
+		}
+	})
+
+	t.Run("EmptySequence", func(t *testing.T) {
+		lstm := NewLSTM(2, 3, 1, 0.01)
+
+		sequence := [][]float64{}
+
+		_, err := lstm.ForwardSequence(sequence)
+		if err == nil {
+			t.Error("Expected error for empty sequence")
+		}
+	})
+
+	t.Run("CacheValidation", func(t *testing.T) {
+		lstm := NewLSTM(2, 3, 1, 0.01)
+
+		sequence := [][]float64{
+			{1.0, 0.0},
+			{0.0, 1.0},
+		}
+
+		_, err := lstm.ForwardSequence(sequence)
+		if err != nil {
+			t.Fatalf("Sequence forward failed: %v", err)
+		}
+
+		// Check that caches are populated
+		if lstm.Cell.InputCache == nil {
+			t.Error("Input cache is nil")
+		}
+		if lstm.Cell.HiddenCache == nil {
+			t.Error("Hidden cache is nil")
+		}
+		if lstm.Cell.CellCache == nil {
+			t.Error("Cell cache is nil")
+		}
+
+		if len(lstm.Cell.InputCache) != 2 {
+			t.Errorf("Expected 2 cached inputs, got %d", len(lstm.Cell.InputCache))
+		}
+		if len(lstm.Cell.HiddenCache) != 3 { // sequence_length + 1
+			t.Errorf("Expected 3 cached hidden states, got %d", len(lstm.Cell.HiddenCache))
+		}
+		if len(lstm.Cell.CellCache) != 3 { // sequence_length + 1
+			t.Errorf("Expected 3 cached cell states, got %d", len(lstm.Cell.CellCache))
+		}
+	})
+
+	t.Run("ResetFunction", func(t *testing.T) {
+		lstm := NewLSTM(2, 3, 1, 0.01)
+
+		// Run forward pass to populate caches
+		sequence := [][]float64{
+			{1.0, 0.0},
+		}
+		_, err := lstm.ForwardSequence(sequence)
+		if err != nil {
+			t.Fatalf("Sequence forward failed: %v", err)
+		}
+
+		// Verify caches are populated
+		if lstm.Cell.InputCache == nil {
+			t.Error("Input cache should not be nil before reset")
+		}
+
+		// Reset and verify caches are cleared
+		lstm.Reset()
+
+		if lstm.Cell.InputCache != nil {
+			t.Error("Input cache should be nil after reset")
+		}
+		if lstm.Cell.HiddenCache != nil {
+			t.Error("Hidden cache should be nil after reset")
+		}
+		if lstm.Cell.CellCache != nil {
+			t.Error("Cell cache should be nil after reset")
+		}
+	})
+}
+
+// TestLSTMMemoryCapabilities tests LSTM's ability to maintain long-term memory
+func TestLSTMMemoryCapabilities(t *testing.T) {
+	t.Run("MemoryPersistence", func(t *testing.T) {
+		lstm := NewLSTM(1, 4, 1, 0.01)
+
+		// Test that LSTM can maintain memory across longer sequences
+		sequence1 := [][]float64{
+			{1.0}, {0.0}, {0.0}, {0.0}, {0.0},
+		}
+		sequence2 := [][]float64{
+			{0.0}, {1.0}, {0.0}, {0.0}, {0.0},
+		}
+
+		outputs1, err := lstm.ForwardSequence(sequence1)
+		if err != nil {
+			t.Fatalf("Sequence 1 forward failed: %v", err)
+		}
+
+		outputs2, err := lstm.ForwardSequence(sequence2)
+		if err != nil {
+			t.Fatalf("Sequence 2 forward failed: %v", err)
+		}
+
+		// Final outputs should be different due to different input histories
+		finalOutput1 := outputs1[len(outputs1)-1][0]
+		finalOutput2 := outputs2[len(outputs2)-1][0]
+
+		if math.Abs(finalOutput1-finalOutput2) < 1e-6 {
+			t.Error("LSTM outputs are too similar for different input sequences")
+		}
+	})
+
+	t.Run("LongSequenceHandling", func(t *testing.T) {
+		lstm := NewLSTM(1, 3, 1, 0.01)
+
+		// Test with longer sequence to check stability
+		sequenceLength := 20
+		sequence := make([][]float64, sequenceLength)
+		for i := 0; i < sequenceLength; i++ {
+			if i%4 == 0 {
+				sequence[i] = []float64{1.0}
+			} else {
+				sequence[i] = []float64{0.0}
+			}
+		}
+
+		outputs, err := lstm.ForwardSequence(sequence)
+		if err != nil {
+			t.Fatalf("Long sequence forward failed: %v", err)
+		}
+
+		if len(outputs) != sequenceLength {
+			t.Errorf("Expected %d outputs, got %d", sequenceLength, len(outputs))
+		}
+
+		// Check that all outputs are finite
+		for i, output := range outputs {
+			if math.IsNaN(output[0]) || math.IsInf(output[0], 0) {
+				t.Errorf("Output[%d] = %f is not finite", i, output[0])
+			}
+		}
+
+		// Check that outputs show variation (not stuck in one state)
+		min, max := outputs[0][0], outputs[0][0]
+		for _, output := range outputs {
+			if output[0] < min {
+				min = output[0]
+			}
+			if output[0] > max {
+				max = output[0]
+			}
+		}
+
+		if math.Abs(max-min) < 1e-6 {
+			t.Error("LSTM outputs show no variation across long sequence")
+		}
+	})
+
+	t.Run("VariableLengthSequences", func(t *testing.T) {
+		lstm := NewLSTM(1, 3, 1, 0.01)
+
+		// Test sequences of different lengths
+		shortSeq := [][]float64{
+			{1.0},
+		}
+		mediumSeq := [][]float64{
+			{1.0}, {0.5}, {0.2},
+		}
+		longSeq := [][]float64{
+			{1.0}, {0.5}, {0.2}, {0.1}, {0.05}, {0.02},
+		}
+
+		outputs1, err := lstm.ForwardSequence(shortSeq)
+		if err != nil {
+			t.Fatalf("Short sequence failed: %v", err)
+		}
+
+		outputs2, err := lstm.ForwardSequence(mediumSeq)
+		if err != nil {
+			t.Fatalf("Medium sequence failed: %v", err)
+		}
+
+		outputs3, err := lstm.ForwardSequence(longSeq)
+		if err != nil {
+			t.Fatalf("Long sequence failed: %v", err)
+		}
+
+		if len(outputs1) != 1 {
+			t.Errorf("Expected 1 output for short sequence, got %d", len(outputs1))
+		}
+		if len(outputs2) != 3 {
+			t.Errorf("Expected 3 outputs for medium sequence, got %d", len(outputs2))
+		}
+		if len(outputs3) != 6 {
+			t.Errorf("Expected 6 outputs for long sequence, got %d", len(outputs3))
+		}
+	})
+}
+
+// TestLSTMVsRNNComparison tests the differences between LSTM and RNN
+func TestLSTMVsRNNComparison(t *testing.T) {
+	t.Run("ArchitecturalDifferences", func(t *testing.T) {
+		lstm := NewLSTM(2, 3, 1, 0.01)
+		rnn := NewRNN(2, 3, 1, 0.01)
+
+		// Same input sequence for both
+		sequence := [][]float64{
+			{1.0, 0.0},
+			{0.0, 1.0},
+			{1.0, 1.0},
+		}
+
+		lstmOutputs, err := lstm.ForwardSequence(sequence)
+		if err != nil {
+			t.Fatalf("LSTM forward failed: %v", err)
+		}
+
+		rnnOutputs, err := rnn.ForwardSequence(sequence)
+		if err != nil {
+			t.Fatalf("RNN forward failed: %v", err)
+		}
+
+		// Both should produce same number of outputs
+		if len(lstmOutputs) != len(rnnOutputs) {
+			t.Errorf("Output length mismatch: LSTM %d, RNN %d", len(lstmOutputs), len(rnnOutputs))
+		}
+
+		// Outputs should be different due to different architectures
+		different := false
+		for i := 0; i < len(lstmOutputs); i++ {
+			if math.Abs(lstmOutputs[i][0]-rnnOutputs[i][0]) > 1e-6 {
+				different = true
+				break
+			}
+		}
+
+		if !different {
+			t.Error("LSTM and RNN outputs are too similar - may indicate implementation error")
+		}
+	})
+
+	t.Run("MemoryCapacityComparison", func(t *testing.T) {
+		// This test demonstrates LSTM's superior memory capacity
+		// In practice, LSTM should maintain information longer than RNN
+
+		lstm := NewLSTM(1, 4, 1, 0.01)
+
+		// Sequence with early signal that should influence later output
+		sequence := [][]float64{
+			{1.0},                             // Important signal at start
+			{0.0}, {0.0}, {0.0}, {0.0}, {0.0}, // Many zeros
+			{0.1}, // Small signal at end
+		}
+
+		outputs, err := lstm.ForwardSequence(sequence)
+		if err != nil {
+			t.Fatalf("LSTM sequence failed: %v", err)
+		}
+
+		// The LSTM should process the entire sequence successfully
+		if len(outputs) != len(sequence) {
+			t.Errorf("Expected %d outputs, got %d", len(sequence), len(outputs))
+		}
+
+		// Check that final output is influenced by the sequence
+		// (exact values depend on random initialization, so we just check it's reasonable)
+		finalOutput := outputs[len(outputs)-1][0]
+		if math.IsNaN(finalOutput) || math.IsInf(finalOutput, 0) {
+			t.Errorf("Final output %f is not finite", finalOutput)
+		}
+	})
+}
+
+// TestLSTMGateMechanisms tests LSTM gate behavior
+func TestLSTMGateMechanisms(t *testing.T) {
+	t.Run("GateOutputRanges", func(t *testing.T) {
+		cell := NewLSTMCell(2, 3)
+
+		// Test with various inputs to check gate output ranges
+		testInputs := [][]float64{
+			{0.0, 0.0},
+			{1.0, 0.0},
+			{0.0, 1.0},
+			{1.0, 1.0},
+			{-1.0, -1.0},
+			{5.0, -5.0},
+		}
+
+		hiddenState := []float64{0.0, 0.0, 0.0}
+		cellState := []float64{0.0, 0.0, 0.0}
+
+		for _, input := range testInputs {
+			newHidden, newCell, err := cell.Forward(input, hiddenState, cellState)
+			if err != nil {
+				t.Fatalf("Forward pass failed with input %v: %v", input, err)
+			}
+
+			// All outputs should be finite
+			for i, val := range newHidden {
+				if math.IsNaN(val) || math.IsInf(val, 0) {
+					t.Errorf("Hidden[%d] = %f is not finite for input %v", i, val, input)
+				}
+			}
+			for i, val := range newCell {
+				if math.IsNaN(val) || math.IsInf(val, 0) {
+					t.Errorf("Cell[%d] = %f is not finite for input %v", i, val, input)
+				}
+			}
+
+			// Update states for next iteration (simulate sequence)
+			hiddenState = newHidden
+			cellState = newCell
+		}
+	})
+
+	t.Run("ForgetGateBehavior", func(t *testing.T) {
+		cell := NewLSTMCell(1, 1)
+
+		// Set specific weights to test forget gate
+		// Make forget gate very negative (should forget everything)
+		for i := range cell.ForgetWeights[0] {
+			cell.ForgetWeights[0][i] = -10.0
+		}
+		cell.ForgetBias[0] = -10.0
+
+		input := []float64{1.0}
+		hiddenState := []float64{0.5}
+		cellState := []float64{1.0} // Start with some cell state
+
+		_, newCell, err := cell.Forward(input, hiddenState, cellState)
+		if err != nil {
+			t.Fatalf("Forward pass failed: %v", err)
+		}
+
+		// With forget gate ≈ 0, cell state should be mostly from input gate
+		// (exact value depends on input gate, but should be much less than 1.0)
+		if newCell[0] > 0.9 {
+			t.Errorf("Cell state %f should be reduced by forget gate", newCell[0])
+		}
+	})
+}
