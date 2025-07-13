@@ -407,11 +407,14 @@ func parseInputData(data string) ([]float64, error) {
 // saveModel saves a perceptron model to JSON file
 func saveModel(perceptron *phase1.Perceptron, filepath string) error {
 	// Create directory if it doesn't exist
-	dir := filepath[:strings.LastIndex(filepath, "/")]
-	if dir != "" && dir != filepath {
-		err := os.MkdirAll(dir, 0750)
-		if err != nil {
-			return fmt.Errorf("failed to create directory: %w", err)
+	lastSlash := strings.LastIndex(filepath, "/")
+	if lastSlash != -1 {
+		dir := filepath[:lastSlash]
+		if dir != "" {
+			err := os.MkdirAll(dir, 0750)
+			if err != nil {
+				return fmt.Errorf("failed to create directory: %w", err)
+			}
 		}
 	}
 
