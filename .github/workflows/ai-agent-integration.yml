@@ -249,7 +249,7 @@ jobs:
         echo "4. **Documentation**: Clear docs enhance the learning experience" >> ai_code_review.md
         
     - name: 📤 Upload AI review
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ai-code-review-${{ github.event.number }}
         path: ai_code_review.md

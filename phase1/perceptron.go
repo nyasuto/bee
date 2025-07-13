@@ -4,11 +4,13 @@
 package phase1
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
-	"math/rand"
+	mathRand "math/rand"
 	"time"
 )
 
@@ -24,8 +26,20 @@ type Perceptron struct {
 // NewPerceptron creates a new perceptron with random weights
 // Learning Rationale: Understanding initialization strategies
 func NewPerceptron(inputSize int, learningRate float64) *Perceptron {
-	// Initialize with current time for random initialization
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	// Use crypto/rand for secure seed generation
+	var seed int64
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		// Fallback to time-based seed if crypto/rand fails
+		seed = time.Now().UnixNano()
+	} else {
+		// Safe conversion to avoid overflow
+		unsignedSeed := binary.LittleEndian.Uint64(buf)
+		// #nosec G115 - Controlled conversion with mask to prevent overflow
+		seed = int64(unsignedSeed & 0x7FFFFFFFFFFFFFFF) // Ensure positive int64
+	}
+	// #nosec G404 - math/rand is appropriate for reproducible ML weight initialization
+	rng := mathRand.New(mathRand.NewSource(seed))
 
 	weights := make([]float64, inputSize)
 	// Xavier initialization for better convergence
@@ -46,7 +60,8 @@ func NewPerceptron(inputSize int, learningRate float64) *Perceptron {
 // NewPerceptronWithSeed creates a perceptron with specific seed for reproducible testing
 func NewPerceptronWithSeed(inputSize int, learningRate float64, seed int64) *Perceptron {
 	// Create a new random source with the given seed
-	rng := rand.New(rand.NewSource(seed))
+	// #nosec G404 - math/rand is appropriate for reproducible ML weight initialization
+	rng := mathRand.New(mathRand.NewSource(seed))
 
 	weights := make([]float64, inputSize)
 	limit := math.Sqrt(6.0 / float64(inputSize))
