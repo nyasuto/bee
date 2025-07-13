@@ -41,7 +41,7 @@ jobs:
     - name: 🔍 Run linting
       uses: golangci/golangci-lint-action@v8
       with:
-        args: --timeout=5m
+        version: v2.1
         
     - name: 💅 Check formatting
       run: |
