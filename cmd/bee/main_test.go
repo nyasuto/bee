@@ -5,6 +5,8 @@ package main
 import (
 	"context"
 	"os"
+	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/nyasuto/bee/cmd/bee/internal/app"
@@ -231,4 +233,138 @@ func TestMainFileExists(t *testing.T) {
 	if err != nil {
 		t.Errorf("main.go file should exist and be readable: %v", err)
 	}
+}
+
+// TestMainFunctionComponents tests individual components called by main()
+func TestMainFunctionComponents(t *testing.T) {
+	t.Run("NewAppFromOS", func(t *testing.T) {
+		// This tests the app.NewAppFromOS() call from main.go
+		application := app.NewAppFromOS()
+		if application == nil {
+			t.Error("NewAppFromOS should return non-nil app")
+		}
+	})
+
+	t.Run("AppRunWithContext", func(t *testing.T) {
+		// This tests the application.Run(ctx) pattern from main.go
+		application := app.NewApp([]string{"bee", "help"})
+		ctx := context.Background()
+
+		err := application.Run(ctx)
+		if err != nil {
+			t.Errorf("App.Run should not fail for help command: %v", err)
+		}
+	})
+
+	t.Run("ErrorHandlingPattern", func(t *testing.T) {
+		// Test the error handling pattern that would trigger os.Exit(1)
+		application := app.NewApp([]string{"bee", "invalid"})
+		ctx := context.Background()
+
+		err := application.Run(ctx)
+		if err == nil {
+			t.Error("Expected error for invalid command that would trigger os.Exit(1)")
+		}
+	})
+}
+
+// TestRunApp tests the runApp function directly
+func TestRunApp(t *testing.T) {
+	t.Run("RunAppSuccess", func(t *testing.T) {
+		err := runApp([]string{"bee", "help"})
+		if err != nil {
+			t.Errorf("runApp should succeed with help command: %v", err)
+		}
+	})
+
+	t.Run("RunAppError", func(t *testing.T) {
+		err := runApp([]string{"bee", "invalid"})
+		if err == nil {
+			t.Error("runApp should return error for invalid command")
+		}
+	})
+
+	t.Run("RunAppNoCommand", func(t *testing.T) {
+		err := runApp([]string{"bee"})
+		if err == nil {
+			t.Error("runApp should return error when no command is specified")
+		}
+	})
+
+	t.Run("RunAppEmptyArgs", func(t *testing.T) {
+		err := runApp([]string{})
+		if err == nil {
+			t.Error("runApp should return error for empty arguments")
+		}
+	})
+}
+
+// TestRunAppFromOS tests the runAppFromOS function directly
+func TestRunAppFromOS(t *testing.T) {
+	// Note: This test will use actual OS args, so we can't easily control it
+	// But we can verify the function exists and is callable
+	t.Run("RunAppFromOSCallable", func(t *testing.T) {
+		// Set up test OS args temporarily
+		oldArgs := os.Args
+		defer func() { os.Args = oldArgs }()
+
+		os.Args = []string{"bee", "help"}
+
+		err := runAppFromOS()
+		if err != nil {
+			t.Errorf("runAppFromOS should not fail with help args: %v", err)
+		}
+	})
+
+	t.Run("RunAppFromOSErrorCase", func(t *testing.T) {
+		// Set up test OS args temporarily
+		oldArgs := os.Args
+		defer func() { os.Args = oldArgs }()
+
+		os.Args = []string{"bee", "invalid"}
+
+		err := runAppFromOS()
+		if err == nil {
+			t.Error("runAppFromOS should return error for invalid command")
+		}
+	})
+}
+
+// TestMainExecutable tests the compiled executable (integration test)
+func TestMainExecutable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping executable test in short mode")
+	}
+
+	// Build the executable first
+	cmd := exec.Command("go", "build", "-o", "bee_test", ".")
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("Failed to build executable: %v", err)
+	}
+	defer os.Remove("bee_test")
+
+	t.Run("ExecutableHelp", func(t *testing.T) {
+		cmd := exec.Command("./bee_test", "help")
+		output, err := cmd.CombinedOutput()
+
+		if err != nil {
+			t.Errorf("Executable help command failed: %v", err)
+		}
+
+		outputStr := string(output)
+		if !strings.Contains(outputStr, "Bee Neural Network CLI Tool") {
+			t.Error("Expected help output to contain tool description")
+		}
+	})
+
+	t.Run("ExecutableInvalidCommand", func(t *testing.T) {
+		cmd := exec.Command("./bee_test", "invalid")
+		_, err := cmd.CombinedOutput()
+
+		// Should exit with non-zero status for invalid command
+		if err == nil {
+			t.Error("Expected error exit for invalid command")
+		}
+	})
 }

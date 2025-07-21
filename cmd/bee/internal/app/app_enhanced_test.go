@@ -308,22 +308,43 @@ func TestAppCommandMapIntegrity(t *testing.T) {
 			// Test that each command can validate appropriate config
 			switch cmdName {
 			case "train":
-				cfg := &config.TrainConfig{}
+				cfg := &config.TrainConfig{
+					BaseConfig: config.BaseConfig{
+						Command: "train",
+					},
+					DataPath:     "test.csv",
+					LearningRate: 0.1,
+					Epochs:       100,
+					Model:        "perceptron",
+					ModelPath:    "model.json",
+				}
 				err := cmd.Validate(cfg)
 				if err != nil {
-					t.Errorf("Expected train command to validate TrainConfig: %v", err)
+					t.Errorf("Expected train command to validate valid TrainConfig: %v", err)
 				}
 			case "benchmark":
-				cfg := &config.BenchmarkConfig{}
+				cfg := &config.BenchmarkConfig{
+					BaseConfig: config.BaseConfig{
+						Command: "benchmark",
+					},
+					Model:   "perceptron",
+					Dataset: "xor",
+				}
 				err := cmd.Validate(cfg)
 				if err != nil {
-					t.Errorf("Expected benchmark command to validate BenchmarkConfig: %v", err)
+					t.Errorf("Expected benchmark command to validate valid BenchmarkConfig: %v", err)
 				}
 			case "timeseries":
-				cfg := &config.TimeSeriesConfig{}
+				cfg := &config.TimeSeriesConfig{
+					BaseConfig: config.BaseConfig{
+						Command: "timeseries",
+					},
+					Dataset: "sine",
+					Model:   "RNN",
+				}
 				err := cmd.Validate(cfg)
 				if err != nil {
-					t.Errorf("Expected timeseries command to validate TimeSeriesConfig: %v", err)
+					t.Errorf("Expected timeseries command to validate valid TimeSeriesConfig: %v", err)
 				}
 			}
 		}
