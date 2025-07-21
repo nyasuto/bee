@@ -126,9 +126,13 @@ func TestPerformanceMetricsCalculation(t *testing.T) {
 
 // TestBenchmarkRunner tests the benchmark runner functionality
 func TestBenchmarkRunner(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping slow benchmark tests in short mode")
+	}
+
 	runner := NewBenchmarkRunner().
-		SetIterations(10).
-		SetWarmupRuns(2).
+		SetIterations(2). // Reduce iterations for faster tests
+		SetWarmupRuns(1). // Reduce warmup runs
 		SetVerbose(false)
 
 	// Test with XOR dataset (known to work differently for perceptron vs MLP)
@@ -662,8 +666,12 @@ func TestLoadBenchmarkResult(t *testing.T) {
 
 // TestRunComparison tests the comparison runner
 func TestRunComparison(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping slow benchmark tests in short mode")
+	}
+
 	runner := NewBenchmarkRunner().
-		SetIterations(5). // Use fewer iterations for faster tests
+		SetIterations(2). // Use fewer iterations for faster tests
 		SetVerbose(false)
 
 	dataset := CreateXORDataset()
@@ -695,8 +703,12 @@ func TestRunComparison(t *testing.T) {
 
 // TestRunMultipleComparisons tests running multiple comparisons
 func TestRunMultipleComparisons(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping slow benchmark tests in short mode")
+	}
+
 	runner := NewBenchmarkRunner().
-		SetIterations(3). // Use fewer iterations for faster tests
+		SetIterations(1). // Use fewer iterations for faster tests
 		SetVerbose(false)
 
 	datasets := []Dataset{
