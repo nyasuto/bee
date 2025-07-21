@@ -45,6 +45,9 @@ type BenchmarkConfig struct {
 	BatchSize    int     // Batch size for CNN training
 	LearningRate float64 // Learning rate for CNN training
 	Epochs       int     // Number of training epochs for CNN
+	// RNN/LSTM-specific configuration
+	SequenceLength int // Length of input sequences for RNN/LSTM
+	HiddenSize     int // Size of hidden state for RNN/LSTM
 }
 
 // CompareConfig contains configuration for the compare command

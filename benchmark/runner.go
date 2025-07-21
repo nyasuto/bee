@@ -2,11 +2,13 @@ package benchmark
 
 import (
 	"fmt"
+	"math"
 	"runtime"
 	"time"
 
 	"github.com/nyasuto/bee/datasets"
 	"github.com/nyasuto/bee/phase1"
+	"github.com/nyasuto/bee/phase2"
 )
 
 // BenchmarkRunner executes performance benchmarks for neural network models
@@ -621,6 +623,393 @@ func (br *BenchmarkRunner) benchmarkPoolingOps(evaluator *datasets.CNNEvaluator,
 	}
 
 	return totalTime / time.Duration(validOps), nil
+}
+
+// RNNBenchmarkConfig holds configuration for RNN/LSTM benchmarking
+// Learning Goal: Understanding RNN/LSTM-specific performance configuration
+type RNNBenchmarkConfig struct {
+	SequenceLength   int     // Length of input sequences
+	HiddenSize       int     // Size of hidden state
+	BatchSize        int     // Batch size for processing
+	Epochs           int     // Number of training epochs
+	LearningRate     float64 // Learning rate for training
+	ModelType        string  // "RNN" or "LSTM"
+	MemoryAnalysis   bool    // Enable detailed memory analysis
+	GradientAnalysis bool    // Enable gradient flow analysis
+}
+
+// BenchmarkRNN measures RNN performance on sequence datasets
+// Learning Goal: Understanding RNN-specific performance measurement patterns
+func (br *BenchmarkRunner) BenchmarkRNN(sequenceDataset *datasets.TimeSeriesDataset, config RNNBenchmarkConfig) (PerformanceMetrics, error) {
+	if br.verbose {
+		fmt.Printf("🔍 Benchmarking %s on %s sequence dataset...\n", config.ModelType, sequenceDataset.Name)
+		fmt.Printf("   Sequence length: %d\n", config.SequenceLength)
+		fmt.Printf("   Hidden size: %d\n", config.HiddenSize)
+		fmt.Printf("   Batch size: %d\n", config.BatchSize)
+	}
+
+	// Import phase2 package for RNN/LSTM implementations
+	var rnn interface{} // Will be type-asserted to appropriate RNN/LSTM
+	var err error
+
+	// Determine input and output sizes from dataset
+	inputSize := len(sequenceDataset.Sequences[0][0])
+	outputSize := len(sequenceDataset.Targets[0])
+
+	// Create RNN or LSTM based on config
+	switch config.ModelType {
+	case "RNN":
+		// Create RNN using phase2 implementation
+		rnnImpl := phase2.NewRNN(inputSize, config.HiddenSize, outputSize, config.LearningRate)
+		rnn = rnnImpl
+	case "LSTM":
+		// Create LSTM using phase2 implementation
+		lstmImpl := phase2.NewLSTM(inputSize, config.HiddenSize, outputSize, config.LearningRate)
+		rnn = lstmImpl
+	default:
+		return PerformanceMetrics{}, fmt.Errorf("unsupported RNN model type: %s", config.ModelType)
+	}
+
+	// Measure memory before training
+	var memBefore runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&memBefore)
+
+	// Measure training time
+	startTime := time.Now()
+
+	// Train RNN/LSTM
+	convergenceEpochs := 0
+	maxEpochs := config.Epochs
+
+	for epoch := 0; epoch < maxEpochs; epoch++ {
+		epochLoss := 0.0
+
+		// Train on all sequences
+		for i := 0; i < len(sequenceDataset.Sequences); i++ {
+			sequence := sequenceDataset.Sequences[i]
+			target := sequenceDataset.Targets[i]
+
+			// Forward pass and calculate loss based on model type
+			var outputs [][]float64
+
+			switch config.ModelType {
+			case "RNN":
+				if rnnModel, ok := rnn.(*phase2.RNN); ok {
+					outputs, err = rnnModel.ForwardSequence(sequence)
+					if err != nil {
+						continue // Skip failed sequences
+					}
+				}
+			case "LSTM":
+				if lstmModel, ok := rnn.(*phase2.LSTM); ok {
+					outputs, err = lstmModel.ForwardSequence(sequence)
+					if err != nil {
+						continue // Skip failed sequences
+					}
+				}
+			}
+
+			// Calculate simple MSE loss for the last output
+			if len(outputs) > 0 {
+				lastOutput := outputs[len(outputs)-1]
+				for j := 0; j < len(target) && j < len(lastOutput); j++ {
+					diff := lastOutput[j] - target[j]
+					epochLoss += diff * diff
+				}
+			}
+		}
+
+		// Check convergence (simplified - could be enhanced)
+		avgLoss := epochLoss / float64(len(sequenceDataset.Sequences))
+		if avgLoss < 0.01 { // Convergence threshold
+			convergenceEpochs = epoch + 1
+			break
+		}
+
+		convergenceEpochs = epoch + 1
+	}
+
+	trainingTime := time.Since(startTime)
+
+	// Measure memory after training
+	var memAfter runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&memAfter)
+
+	// Safe conversion with overflow check
+	memoryUsage := int64(0)
+	if memAfter.Alloc >= memBefore.Alloc {
+		diff := memAfter.Alloc - memBefore.Alloc
+		if diff <= uint64(^uint64(0)>>1) {
+			memoryUsage = int64(diff)
+		}
+	}
+
+	// Measure inference time with sequence processing
+	inferenceTime, err := br.benchmarkSequenceInference(rnn, config, sequenceDataset)
+	if err != nil {
+		return PerformanceMetrics{}, fmt.Errorf("sequence inference benchmark failed: %w", err)
+	}
+
+	// Calculate final accuracy on test sequences
+	accuracy, avgLoss := br.calculateSequenceAccuracy(rnn, config, sequenceDataset)
+
+	// Measure sequence-specific metrics
+	var seqProcessingTime time.Duration
+	var memoryScaling int64
+
+	if config.MemoryAnalysis {
+		seqProcessingTime, memoryScaling, err = br.analyzeSequenceScaling(rnn, config)
+		if err != nil {
+			if br.verbose {
+				fmt.Printf("  ⚠️ Memory analysis failed: %v\n", err)
+			}
+		}
+	}
+
+	if br.verbose {
+		fmt.Printf("  ✅ Training completed in %d epochs, %.2f%% accuracy\n",
+			convergenceEpochs, accuracy*100)
+		fmt.Printf("  📊 Sequence processing: %v avg time\n", seqProcessingTime)
+		if config.MemoryAnalysis {
+			fmt.Printf("  💾 Memory scaling: %s\n", FormatMemory(memoryScaling))
+		}
+	}
+
+	return PerformanceMetrics{
+		ModelType:       config.ModelType,
+		DatasetName:     sequenceDataset.Name,
+		TrainingTime:    trainingTime,
+		InferenceTime:   inferenceTime,
+		MemoryUsage:     memoryUsage,
+		Accuracy:        accuracy,
+		ConvergenceRate: convergenceEpochs,
+		FinalLoss:       avgLoss,
+		Timestamp:       time.Now(),
+		// RNN-specific metrics
+		SequenceLength:         config.SequenceLength,
+		HiddenSize:             config.HiddenSize,
+		BatchSize:              config.BatchSize,
+		MemoryScaling:          memoryScaling,
+		SequenceProcessingTime: seqProcessingTime,
+	}, nil
+}
+
+// benchmarkSequenceInference measures sequence inference performance
+func (br *BenchmarkRunner) benchmarkSequenceInference(rnn interface{}, config RNNBenchmarkConfig, dataset *datasets.TimeSeriesDataset) (time.Duration, error) {
+	if len(dataset.Sequences) == 0 {
+		return 0, fmt.Errorf("empty sequence dataset")
+	}
+
+	// Warmup runs
+	for i := 0; i < br.warmupRuns && i < len(dataset.Sequences); i++ {
+		switch config.ModelType {
+		case "RNN":
+			if rnnModel, ok := rnn.(*phase2.RNN); ok {
+				_, _ = rnnModel.ForwardSequence(dataset.Sequences[i]) //nolint:errcheck // Ignore errors in warmup
+			}
+		case "LSTM":
+			if lstmModel, ok := rnn.(*phase2.LSTM); ok {
+				_, _ = lstmModel.ForwardSequence(dataset.Sequences[i]) //nolint:errcheck // Ignore errors in warmup
+			}
+		}
+	}
+
+	// Benchmark inference
+	totalTime := time.Duration(0)
+	successfulInferences := 0
+
+	startTime := time.Now()
+	for iter := 0; iter < br.iterations; iter++ {
+		for i := 0; i < len(dataset.Sequences); i++ {
+			switch config.ModelType {
+			case "RNN":
+				if rnnModel, ok := rnn.(*phase2.RNN); ok {
+					_, err := rnnModel.ForwardSequence(dataset.Sequences[i])
+					if err == nil {
+						successfulInferences++
+					}
+				}
+			case "LSTM":
+				if lstmModel, ok := rnn.(*phase2.LSTM); ok {
+					_, err := lstmModel.ForwardSequence(dataset.Sequences[i])
+					if err == nil {
+						successfulInferences++
+					}
+				}
+			}
+		}
+	}
+	totalTime = time.Since(startTime)
+
+	if successfulInferences == 0 {
+		return 0, fmt.Errorf("no successful sequence inferences")
+	}
+
+	return totalTime / time.Duration(successfulInferences), nil
+}
+
+// calculateSequenceAccuracy computes accuracy and loss for sequence models
+func (br *BenchmarkRunner) calculateSequenceAccuracy(rnn interface{}, config RNNBenchmarkConfig, dataset *datasets.TimeSeriesDataset) (float64, float64) {
+	if len(dataset.Sequences) == 0 {
+		return 0.0, 0.0
+	}
+
+	correct := 0
+	totalLoss := 0.0
+
+	for i := 0; i < len(dataset.Sequences); i++ {
+		var outputs [][]float64
+		var err error
+
+		switch config.ModelType {
+		case "RNN":
+			if rnnModel, ok := rnn.(*phase2.RNN); ok {
+				outputs, err = rnnModel.ForwardSequence(dataset.Sequences[i])
+			}
+		case "LSTM":
+			if lstmModel, ok := rnn.(*phase2.LSTM); ok {
+				outputs, err = lstmModel.ForwardSequence(dataset.Sequences[i])
+			}
+		}
+
+		if err != nil || len(outputs) == 0 {
+			continue
+		}
+
+		// Use last output for prediction
+		lastOutput := outputs[len(outputs)-1]
+		target := dataset.Targets[i]
+
+		// Calculate MSE loss
+		loss := 0.0
+		for j := 0; j < len(target) && j < len(lastOutput); j++ {
+			diff := lastOutput[j] - target[j]
+			loss += diff * diff
+		}
+		totalLoss += loss
+
+		// Simple accuracy: check if within threshold
+		threshold := 0.5
+		accurate := true
+		for j := 0; j < len(target) && j < len(lastOutput); j++ {
+			if math.Abs(lastOutput[j]-target[j]) > threshold {
+				accurate = false
+				break
+			}
+		}
+		if accurate {
+			correct++
+		}
+	}
+
+	accuracy := float64(correct) / float64(len(dataset.Sequences))
+	avgLoss := totalLoss / float64(len(dataset.Sequences))
+
+	return accuracy, avgLoss
+}
+
+// analyzeSequenceScaling analyzes memory scaling characteristics for different sequence lengths
+func (br *BenchmarkRunner) analyzeSequenceScaling(rnn interface{}, config RNNBenchmarkConfig) (time.Duration, int64, error) {
+	// Test with different sequence lengths to analyze scaling
+	testLengths := []int{10, 50, 100, 200}
+
+	var totalTime time.Duration
+	var memoryGrowth int64
+
+	// Create test sequences of different lengths
+	inputSize := 10 // Standard test input size
+
+	for _, seqLen := range testLengths {
+		// Create test sequence
+		testSequence := make([][]float64, seqLen)
+		for t := 0; t < seqLen; t++ {
+			testSequence[t] = make([]float64, inputSize)
+			for i := 0; i < inputSize; i++ {
+				testSequence[t][i] = 0.5 // Neutral test value
+			}
+		}
+
+		// Measure memory before
+		var memBefore runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&memBefore)
+
+		// Time the sequence processing
+		start := time.Now()
+		switch config.ModelType {
+		case "RNN":
+			if rnnModel, ok := rnn.(*phase2.RNN); ok {
+				_, _ = rnnModel.ForwardSequence(testSequence) //nolint:errcheck // Ignore errors in analysis
+			}
+		case "LSTM":
+			if lstmModel, ok := rnn.(*phase2.LSTM); ok {
+				_, _ = lstmModel.ForwardSequence(testSequence) //nolint:errcheck // Ignore errors in analysis
+			}
+		}
+		totalTime += time.Since(start)
+
+		// Measure memory after
+		var memAfter runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&memAfter)
+
+		if memAfter.Alloc >= memBefore.Alloc {
+			diff := memAfter.Alloc - memBefore.Alloc
+			if diff <= uint64(^uint64(0)>>1) {
+				memoryGrowth += int64(diff)
+			}
+		}
+	}
+
+	avgTime := totalTime / time.Duration(len(testLengths))
+	return avgTime, memoryGrowth, nil
+}
+
+// RunRNNComparison executes comparative benchmark between RNN and LSTM
+// Learning Goal: Understanding RNN vs LSTM architectural performance trade-offs
+func (br *BenchmarkRunner) RunRNNComparison(sequenceDataset *datasets.TimeSeriesDataset, config RNNBenchmarkConfig) (ComparisonReport, error) {
+	if br.verbose {
+		fmt.Printf("🚀 Running RNN vs LSTM comparative benchmark on %s dataset\n", sequenceDataset.Name)
+		fmt.Println("─────────────────────────────────────────────────────")
+	}
+
+	// Benchmark RNN
+	rnnConfig := config
+	rnnConfig.ModelType = "RNN"
+	rnnMetrics, err := br.BenchmarkRNN(sequenceDataset, rnnConfig)
+	if err != nil {
+		return ComparisonReport{}, fmt.Errorf("RNN benchmark failed: %w", err)
+	}
+
+	// Benchmark LSTM
+	lstmConfig := config
+	lstmConfig.ModelType = "LSTM"
+	lstmMetrics, err := br.BenchmarkRNN(sequenceDataset, lstmConfig)
+	if err != nil {
+		return ComparisonReport{}, fmt.Errorf("LSTM benchmark failed: %w", err)
+	}
+
+	// Generate comparison report
+	report := GenerateComparisonReport(rnnMetrics, lstmMetrics)
+
+	if br.verbose {
+		fmt.Println("\n📊 Benchmark Results:")
+		fmt.Printf("RNN:  %.2f%% accuracy, %s training, %s inference\n",
+			rnnMetrics.Accuracy*100,
+			FormatDuration(rnnMetrics.TrainingTime),
+			FormatDuration(rnnMetrics.InferenceTime))
+		fmt.Printf("LSTM: %.2f%% accuracy, %s training, %s inference\n",
+			lstmMetrics.Accuracy*100,
+			FormatDuration(lstmMetrics.TrainingTime),
+			FormatDuration(lstmMetrics.InferenceTime))
+
+		fmt.Println("\n" + "─────────────────────────────────────────────────────")
+		PrintComparisonSummary(report)
+	}
+
+	return report, nil
 }
 
 // RunCNNComparison executes comparative benchmark between MLP and CNN

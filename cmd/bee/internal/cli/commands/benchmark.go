@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -70,6 +71,12 @@ func (cmd *BenchmarkCommand) Execute(ctx context.Context, cfg interface{}) error
 		return cmd.benchmarkMLP(runner, benchmarkCfg)
 	case "cnn":
 		return cmd.benchmarkCNN(runner, benchmarkCfg)
+	case "rnn":
+		return cmd.benchmarkRNN(runner, benchmarkCfg)
+	case "lstm":
+		return cmd.benchmarkLSTM(runner, benchmarkCfg)
+	case "rnn-compare":
+		return cmd.benchmarkRNNComparison(runner, benchmarkCfg)
 	case "compare":
 		return cmd.benchmarkComparison(runner, benchmarkCfg)
 	default:
@@ -331,6 +338,304 @@ func (cmd *BenchmarkCommand) runBatchProcessingAnalysis(runner *benchmark.Benchm
 	cmd.displayBatchProcessingMetrics(batchMetrics)
 
 	return nil
+}
+
+// benchmarkRNN runs RNN benchmarks
+func (cmd *BenchmarkCommand) benchmarkRNN(runner *benchmark.BenchmarkRunner, cfg *config.BenchmarkConfig) error {
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "🔄 Running RNN benchmark...")
+
+	// Get sequence dataset
+	sequenceDataset, err := cmd.getSequenceDataset(cfg.Dataset)
+	if err != nil {
+		return fmt.Errorf("failed to get sequence dataset: %w", err)
+	}
+
+	// Create RNN configuration
+	rnnConfig := benchmark.RNNBenchmarkConfig{
+		SequenceLength:   cfg.SequenceLength,
+		HiddenSize:       cfg.HiddenSize,
+		BatchSize:        cfg.BatchSize,
+		Epochs:           cfg.Epochs,
+		LearningRate:     cfg.LearningRate,
+		ModelType:        "RNN",
+		MemoryAnalysis:   true,
+		GradientAnalysis: false,
+	}
+
+	// Set defaults if not specified
+	if rnnConfig.SequenceLength == 0 {
+		rnnConfig.SequenceLength = 10
+	}
+	if rnnConfig.HiddenSize == 0 {
+		rnnConfig.HiddenSize = 32
+	}
+	if rnnConfig.BatchSize == 0 {
+		rnnConfig.BatchSize = 16
+	}
+	if rnnConfig.Epochs == 0 {
+		rnnConfig.Epochs = 50
+	}
+	if rnnConfig.LearningRate == 0 {
+		rnnConfig.LearningRate = 0.01
+	}
+
+	// Run RNN benchmark
+	metrics, err := runner.BenchmarkRNN(sequenceDataset, rnnConfig)
+	if err != nil {
+		return fmt.Errorf("RNN benchmark failed: %w", err)
+	}
+
+	// Display results
+	cmd.displayRNNMetrics(metrics)
+
+	// Save results if output path specified
+	if cfg.OutputPath != "" {
+		return cmd.saveMetrics(metrics, cfg.OutputPath)
+	}
+
+	return nil
+}
+
+// benchmarkLSTM runs LSTM benchmarks
+func (cmd *BenchmarkCommand) benchmarkLSTM(runner *benchmark.BenchmarkRunner, cfg *config.BenchmarkConfig) error {
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "🧠 Running LSTM benchmark...")
+
+	// Get sequence dataset
+	sequenceDataset, err := cmd.getSequenceDataset(cfg.Dataset)
+	if err != nil {
+		return fmt.Errorf("failed to get sequence dataset: %w", err)
+	}
+
+	// Create LSTM configuration
+	lstmConfig := benchmark.RNNBenchmarkConfig{
+		SequenceLength:   cfg.SequenceLength,
+		HiddenSize:       cfg.HiddenSize,
+		BatchSize:        cfg.BatchSize,
+		Epochs:           cfg.Epochs,
+		LearningRate:     cfg.LearningRate,
+		ModelType:        "LSTM",
+		MemoryAnalysis:   true,
+		GradientAnalysis: false,
+	}
+
+	// Set defaults if not specified
+	if lstmConfig.SequenceLength == 0 {
+		lstmConfig.SequenceLength = 10
+	}
+	if lstmConfig.HiddenSize == 0 {
+		lstmConfig.HiddenSize = 32
+	}
+	if lstmConfig.BatchSize == 0 {
+		lstmConfig.BatchSize = 16
+	}
+	if lstmConfig.Epochs == 0 {
+		lstmConfig.Epochs = 50
+	}
+	if lstmConfig.LearningRate == 0 {
+		lstmConfig.LearningRate = 0.01
+	}
+
+	// Run LSTM benchmark
+	metrics, err := runner.BenchmarkRNN(sequenceDataset, lstmConfig)
+	if err != nil {
+		return fmt.Errorf("LSTM benchmark failed: %w", err)
+	}
+
+	// Display results
+	cmd.displayRNNMetrics(metrics)
+
+	// Save results if output path specified
+	if cfg.OutputPath != "" {
+		return cmd.saveMetrics(metrics, cfg.OutputPath)
+	}
+
+	return nil
+}
+
+// benchmarkRNNComparison runs RNN vs LSTM comparative benchmarks
+func (cmd *BenchmarkCommand) benchmarkRNNComparison(runner *benchmark.BenchmarkRunner, cfg *config.BenchmarkConfig) error {
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "⚡ Running RNN vs LSTM comparative benchmark...")
+
+	// Get sequence dataset
+	sequenceDataset, err := cmd.getSequenceDataset(cfg.Dataset)
+	if err != nil {
+		return fmt.Errorf("failed to get sequence dataset: %w", err)
+	}
+
+	// Create RNN comparison configuration
+	comparisonConfig := benchmark.RNNBenchmarkConfig{
+		SequenceLength:   cfg.SequenceLength,
+		HiddenSize:       cfg.HiddenSize,
+		BatchSize:        cfg.BatchSize,
+		Epochs:           cfg.Epochs,
+		LearningRate:     cfg.LearningRate,
+		MemoryAnalysis:   true,
+		GradientAnalysis: false,
+	}
+
+	// Set defaults if not specified
+	if comparisonConfig.SequenceLength == 0 {
+		comparisonConfig.SequenceLength = 10
+	}
+	if comparisonConfig.HiddenSize == 0 {
+		comparisonConfig.HiddenSize = 32
+	}
+	if comparisonConfig.BatchSize == 0 {
+		comparisonConfig.BatchSize = 16
+	}
+	if comparisonConfig.Epochs == 0 {
+		comparisonConfig.Epochs = 50
+	}
+	if comparisonConfig.LearningRate == 0 {
+		comparisonConfig.LearningRate = 0.01
+	}
+
+	// Run RNN vs LSTM comparison
+	report, err := runner.RunRNNComparison(sequenceDataset, comparisonConfig)
+	if err != nil {
+		return fmt.Errorf("RNN comparison failed: %w", err)
+	}
+
+	// Display comparison results
+	cmd.displayComparisonReport(report)
+
+	// Save results if output path specified
+	if cfg.OutputPath != "" {
+		return cmd.saveComparisonReport(report, cfg.OutputPath)
+	}
+
+	return nil
+}
+
+// getSequenceDataset retrieves a sequence dataset for RNN/LSTM benchmarking
+func (cmd *BenchmarkCommand) getSequenceDataset(datasetName string) (*datasets.TimeSeriesDataset, error) {
+	switch strings.ToLower(datasetName) {
+	case "sine", "sinusoidal":
+		return cmd.createSinusoidalDataset(), nil
+	case "simple", "sequence":
+		return cmd.createSimpleSequenceDataset(), nil
+	case "timeseries":
+		return cmd.createTimeSeriesDataset(), nil
+	default:
+		return nil, fmt.Errorf("unsupported sequence dataset: %s", datasetName)
+	}
+}
+
+// createSinusoidalDataset creates a sinusoidal sequence dataset
+func (cmd *BenchmarkCommand) createSinusoidalDataset() *datasets.TimeSeriesDataset {
+	numSequences := 100
+	sequenceLength := 10
+	sequences := make([][][]float64, numSequences)
+	targets := make([][]float64, numSequences)
+
+	for i := 0; i < numSequences; i++ {
+		// Create sinusoidal sequence
+		sequences[i] = make([][]float64, sequenceLength)
+		for t := 0; t < sequenceLength; t++ {
+			x := float64(i*sequenceLength+t) * 0.1
+			sequences[i][t] = []float64{x} // Single input feature
+		}
+
+		// Target is the next value in the sine wave
+		nextX := float64(i*sequenceLength+sequenceLength) * 0.1
+		nextVal := 0.5 + 0.5*math.Sin(nextX) // Normalize to [0,1]
+		targets[i] = []float64{nextVal}
+	}
+
+	return &datasets.TimeSeriesDataset{
+		Name:        "Sinusoidal",
+		Type:        "prediction",
+		Sequences:   sequences,
+		Targets:     targets,
+		Features:    1,
+		OutputSize:  1,
+		SeqLength:   sequenceLength,
+		Description: "Sinusoidal wave prediction dataset",
+	}
+}
+
+// createSimpleSequenceDataset creates a simple pattern recognition dataset
+func (cmd *BenchmarkCommand) createSimpleSequenceDataset() *datasets.TimeSeriesDataset {
+	numSequences := 80
+	sequenceLength := 5
+	sequences := make([][][]float64, numSequences)
+	targets := make([][]float64, numSequences)
+
+	for i := 0; i < numSequences; i++ {
+		// Create sequence with pattern: [1,0,1,0,1] or [0,1,0,1,0]
+		sequences[i] = make([][]float64, sequenceLength)
+		pattern := i % 2
+		for t := 0; t < sequenceLength; t++ {
+			val := float64((pattern + t) % 2)
+			sequences[i][t] = []float64{val}
+		}
+
+		// Target is the pattern type
+		targets[i] = []float64{float64(pattern)}
+	}
+
+	return &datasets.TimeSeriesDataset{
+		Name:        "SimpleSequence",
+		Type:        "classification",
+		Sequences:   sequences,
+		Targets:     targets,
+		Features:    1,
+		OutputSize:  1,
+		SeqLength:   sequenceLength,
+		Description: "Simple binary pattern recognition dataset",
+	}
+}
+
+// createTimeSeriesDataset creates a time series prediction dataset
+func (cmd *BenchmarkCommand) createTimeSeriesDataset() *datasets.TimeSeriesDataset {
+	numSequences := 120
+	sequenceLength := 8
+	sequences := make([][][]float64, numSequences)
+	targets := make([][]float64, numSequences)
+
+	for i := 0; i < numSequences; i++ {
+		// Create time series with trend and noise
+		sequences[i] = make([][]float64, sequenceLength)
+		base := float64(i) * 0.01
+		for t := 0; t < sequenceLength; t++ {
+			// Linear trend with some oscillation
+			val := base + float64(t)*0.1 + 0.05*math.Sin(float64(t))
+			sequences[i][t] = []float64{val}
+		}
+
+		// Target is the next value in the series
+		nextVal := base + float64(sequenceLength)*0.1 + 0.05*math.Sin(float64(sequenceLength))
+		targets[i] = []float64{nextVal}
+	}
+
+	return &datasets.TimeSeriesDataset{
+		Name:        "TimeSeries",
+		Type:        "regression",
+		Sequences:   sequences,
+		Targets:     targets,
+		Features:    1,
+		OutputSize:  1,
+		SeqLength:   sequenceLength,
+		Description: "Time series prediction with trend and oscillation",
+	}
+}
+
+// displayRNNMetrics shows RNN/LSTM-specific performance metrics
+func (cmd *BenchmarkCommand) displayRNNMetrics(metrics benchmark.PerformanceMetrics) {
+	cmd.displayPerformanceMetrics(metrics)
+
+	if metrics.SequenceLength > 0 {
+		cmd.outputWriter.WriteMessage(output.LogLevelInfo, "Sequence Length: %d", metrics.SequenceLength)
+	}
+	if metrics.HiddenSize > 0 {
+		cmd.outputWriter.WriteMessage(output.LogLevelInfo, "Hidden Size: %d", metrics.HiddenSize)
+	}
+	if metrics.SequenceProcessingTime > 0 {
+		cmd.outputWriter.WriteMessage(output.LogLevelInfo, "Sequence Processing Time: %s", benchmark.FormatDuration(metrics.SequenceProcessingTime))
+	}
+	if metrics.MemoryScaling > 0 {
+		cmd.outputWriter.WriteMessage(output.LogLevelInfo, "Memory Scaling: %s", benchmark.FormatMemory(metrics.MemoryScaling))
+	}
 }
 
 // getStandardDataset retrieves a standard benchmark dataset

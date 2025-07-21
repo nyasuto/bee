@@ -26,6 +26,11 @@ type PerformanceMetrics struct {
 	PoolingTime     time.Duration `json:"pooling_time,omitempty"`     // Average pooling operation time
 	BatchSize       int           `json:"batch_size,omitempty"`       // Batch size used for training
 	FeatureMapSize  int64         `json:"feature_map_size,omitempty"` // Memory usage of feature maps
+	// RNN/LSTM-specific metrics
+	SequenceLength         int           `json:"sequence_length,omitempty"`          // Length of input sequences
+	HiddenSize             int           `json:"hidden_size,omitempty"`              // Size of hidden state
+	MemoryScaling          int64         `json:"memory_scaling,omitempty"`           // Memory scaling with sequence length
+	SequenceProcessingTime time.Duration `json:"sequence_processing_time,omitempty"` // Average sequence processing time
 }
 
 // BenchmarkResult represents a single benchmark execution result
