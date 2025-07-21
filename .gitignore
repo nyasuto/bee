@@ -45,6 +45,10 @@ Thumbs.db
 coverage.out
 coverage.html
 
+# Test data files (MNIST datasets)
+*.gz
+datasets/mnist/
+
 # Air live reload
 tmp/
 

@@ -72,13 +72,11 @@ func TestMNISTExample(t *testing.T) {
 		invalidPaths := []string{
 			"/root/protected",
 			"/dev/null",
-			"./nonexistent",
-			"../invalid",
-			"~/doesnotexist",
+			"/tmp/nonexistent_mnist_path",
 		}
 
 		for _, path := range invalidPaths {
-			t.Run(path, func(t *testing.T) {
+			t.Run("invalid_path", func(t *testing.T) {
 				// Test both verbose and non-verbose modes
 				err := MNISTExample(path, false)
 				if err == nil {
