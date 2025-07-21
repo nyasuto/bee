@@ -623,6 +623,81 @@ func (br *BenchmarkRunner) benchmarkPoolingOps(evaluator *datasets.CNNEvaluator,
 	return totalTime / time.Duration(validOps), nil
 }
 
+// RunRNNLSTMComparison executes comprehensive RNN vs LSTM comparative benchmark
+// Learning Goal: Understanding sequence processing architectural trade-offs
+func (br *BenchmarkRunner) RunRNNLSTMComparison(config RNNBenchmarkConfig) (RNNComparison, error) {
+	if br.verbose {
+		fmt.Printf("🚀 Running comprehensive RNN vs LSTM comparison\n")
+		fmt.Printf("   Config: %d inputs, %d hidden, sequence lengths: %v\n",
+			config.InputSize, config.HiddenSize, config.SequenceLengths)
+		fmt.Println("─────────────────────────────────────────────────────")
+	}
+
+	return br.CompareRNNvsLSTM(config)
+}
+
+// RunSequenceLengthAnalysis performs sequence length scalability analysis
+// Learning Goal: Understanding sequence length impact on RNN/LSTM performance
+func (br *BenchmarkRunner) RunSequenceLengthAnalysis(modelType string, baseConfig RNNBenchmarkConfig) (RNNPerformanceReport, error) {
+	if br.verbose {
+		fmt.Printf("🚀 Running sequence length scalability analysis for %s\n", modelType)
+		fmt.Println("─────────────────────────────────────────────────────")
+	}
+
+	switch modelType {
+	case "rnn":
+		return br.BenchmarkRNN(baseConfig)
+	case "lstm":
+		return br.BenchmarkLSTM(baseConfig)
+	default:
+		return RNNPerformanceReport{}, fmt.Errorf("unsupported model type: %s", modelType)
+	}
+}
+
+// RunGradientFlowAnalysis analyzes gradient flow characteristics
+// Learning Goal: Understanding gradient vanishing/exploding problems
+func (br *BenchmarkRunner) RunGradientFlowAnalysis(config RNNBenchmarkConfig) (map[string][]float64, error) {
+	if br.verbose {
+		fmt.Println("🚀 Running gradient flow analysis")
+		fmt.Println("   Analyzing gradient norms across sequence lengths...")
+		fmt.Println("─────────────────────────────────────────────────────")
+	}
+
+	results := make(map[string][]float64)
+
+	// Test RNN gradient flow
+	rnnReport, err := br.BenchmarkRNN(config)
+	if err == nil {
+		rnnGradients := make([]float64, len(rnnReport.SequenceMetrics))
+		for i, metric := range rnnReport.SequenceMetrics {
+			rnnGradients[i] = metric.GradientNorm
+		}
+		results["rnn_gradients"] = rnnGradients
+	}
+
+	// Test LSTM gradient flow
+	lstmReport, err := br.BenchmarkLSTM(config)
+	if err == nil {
+		lstmGradients := make([]float64, len(lstmReport.SequenceMetrics))
+		for i, metric := range lstmReport.SequenceMetrics {
+			lstmGradients[i] = metric.GradientNorm
+		}
+		results["lstm_gradients"] = lstmGradients
+	}
+
+	if len(results) == 0 {
+		return nil, fmt.Errorf("gradient flow analysis failed for all models")
+	}
+
+	if br.verbose {
+		for modelType, gradients := range results {
+			fmt.Printf("   %s gradient norms: %v\n", modelType, gradients)
+		}
+	}
+
+	return results, nil
+}
+
 // RunCNNComparison executes comparative benchmark between MLP and CNN
 // Learning Goal: Understanding architectural performance trade-offs
 func (br *BenchmarkRunner) RunCNNComparison(imageDataset *datasets.ImageDataset, cnnConfig CNNBenchmarkConfig, mlpHidden []int) (ComparisonReport, error) {

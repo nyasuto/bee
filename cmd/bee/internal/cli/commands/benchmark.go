@@ -70,6 +70,12 @@ func (cmd *BenchmarkCommand) Execute(ctx context.Context, cfg interface{}) error
 		return cmd.benchmarkMLP(runner, benchmarkCfg)
 	case "cnn":
 		return cmd.benchmarkCNN(runner, benchmarkCfg)
+	case "rnn":
+		return cmd.benchmarkRNN(runner, benchmarkCfg)
+	case "lstm":
+		return cmd.benchmarkLSTM(runner, benchmarkCfg)
+	case "rnn-compare", "sequence":
+		return cmd.benchmarkRNNComparison(runner, benchmarkCfg)
 	case "compare":
 		return cmd.benchmarkComparison(runner, benchmarkCfg)
 	default:
@@ -512,5 +518,258 @@ func (cmd *BenchmarkCommand) saveComparisonReport(report benchmark.ComparisonRep
 	}
 
 	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "📄 Comparison report saved to: %s", outputPath)
+	return nil
+}
+
+// benchmarkRNN runs RNN benchmarks
+func (cmd *BenchmarkCommand) benchmarkRNN(runner *benchmark.BenchmarkRunner, cfg *config.BenchmarkConfig) error {
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "🔬 Running RNN performance analysis...")
+
+	// Create RNN benchmark configuration
+	rnnConfig := benchmark.RNNBenchmarkConfig{
+		InputSize:       cfg.InputSize,
+		HiddenSize:      cfg.HiddenSize,
+		OutputSize:      cfg.OutputSize,
+		SequenceLengths: cfg.SequenceLengths,
+		LearningRate:    cfg.LearningRate,
+		MaxEpochs:       cfg.Epochs,
+		BatchSize:       cfg.BatchSize,
+		GradientClip:    1.0,
+	}
+
+	// Set defaults if not specified
+	if rnnConfig.InputSize == 0 {
+		rnnConfig.InputSize = 10
+	}
+	if rnnConfig.HiddenSize == 0 {
+		rnnConfig.HiddenSize = 20
+	}
+	if rnnConfig.OutputSize == 0 {
+		rnnConfig.OutputSize = 5
+	}
+	if len(rnnConfig.SequenceLengths) == 0 {
+		rnnConfig.SequenceLengths = []int{5, 10, 25, 50, 100}
+	}
+	if rnnConfig.LearningRate == 0 {
+		rnnConfig.LearningRate = 0.01
+	}
+	if rnnConfig.MaxEpochs == 0 {
+		rnnConfig.MaxEpochs = 100
+	}
+	if rnnConfig.BatchSize == 0 {
+		rnnConfig.BatchSize = 32
+	}
+
+	// Run RNN benchmark
+	report, err := runner.BenchmarkRNN(rnnConfig)
+	if err != nil {
+		return fmt.Errorf("RNN benchmark failed: %w", err)
+	}
+
+	// Display results
+	cmd.displayRNNReport(report)
+
+	// Save results if output path specified
+	if cfg.OutputPath != "" {
+		return cmd.saveRNNReport(report, cfg.OutputPath)
+	}
+
+	return nil
+}
+
+// benchmarkLSTM runs LSTM benchmarks
+func (cmd *BenchmarkCommand) benchmarkLSTM(runner *benchmark.BenchmarkRunner, cfg *config.BenchmarkConfig) error {
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "🔬 Running LSTM performance analysis...")
+
+	// Create LSTM benchmark configuration
+	rnnConfig := benchmark.RNNBenchmarkConfig{
+		InputSize:       cfg.InputSize,
+		HiddenSize:      cfg.HiddenSize,
+		OutputSize:      cfg.OutputSize,
+		SequenceLengths: cfg.SequenceLengths,
+		LearningRate:    cfg.LearningRate,
+		MaxEpochs:       cfg.Epochs,
+		BatchSize:       cfg.BatchSize,
+		GradientClip:    1.0,
+	}
+
+	// Set defaults if not specified
+	if rnnConfig.InputSize == 0 {
+		rnnConfig.InputSize = 10
+	}
+	if rnnConfig.HiddenSize == 0 {
+		rnnConfig.HiddenSize = 20
+	}
+	if rnnConfig.OutputSize == 0 {
+		rnnConfig.OutputSize = 5
+	}
+	if len(rnnConfig.SequenceLengths) == 0 {
+		rnnConfig.SequenceLengths = []int{5, 10, 25, 50, 100}
+	}
+	if rnnConfig.LearningRate == 0 {
+		rnnConfig.LearningRate = 0.01
+	}
+	if rnnConfig.MaxEpochs == 0 {
+		rnnConfig.MaxEpochs = 100
+	}
+	if rnnConfig.BatchSize == 0 {
+		rnnConfig.BatchSize = 32
+	}
+
+	// Run LSTM benchmark
+	report, err := runner.BenchmarkLSTM(rnnConfig)
+	if err != nil {
+		return fmt.Errorf("LSTM benchmark failed: %w", err)
+	}
+
+	// Display results
+	cmd.displayRNNReport(report)
+
+	// Save results if output path specified
+	if cfg.OutputPath != "" {
+		return cmd.saveRNNReport(report, cfg.OutputPath)
+	}
+
+	return nil
+}
+
+// benchmarkRNNComparison runs RNN vs LSTM comparison
+func (cmd *BenchmarkCommand) benchmarkRNNComparison(runner *benchmark.BenchmarkRunner, cfg *config.BenchmarkConfig) error {
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "⚖️ Running RNN vs LSTM comparative analysis...")
+
+	// Create RNN benchmark configuration
+	rnnConfig := benchmark.RNNBenchmarkConfig{
+		InputSize:       cfg.InputSize,
+		HiddenSize:      cfg.HiddenSize,
+		OutputSize:      cfg.OutputSize,
+		SequenceLengths: cfg.SequenceLengths,
+		LearningRate:    cfg.LearningRate,
+		MaxEpochs:       cfg.Epochs,
+		BatchSize:       cfg.BatchSize,
+		GradientClip:    1.0,
+	}
+
+	// Set defaults if not specified
+	if rnnConfig.InputSize == 0 {
+		rnnConfig.InputSize = 10
+	}
+	if rnnConfig.HiddenSize == 0 {
+		rnnConfig.HiddenSize = 20
+	}
+	if rnnConfig.OutputSize == 0 {
+		rnnConfig.OutputSize = 5
+	}
+	if len(rnnConfig.SequenceLengths) == 0 {
+		rnnConfig.SequenceLengths = []int{5, 10, 25, 50, 100}
+	}
+	if rnnConfig.LearningRate == 0 {
+		rnnConfig.LearningRate = 0.01
+	}
+	if rnnConfig.MaxEpochs == 0 {
+		rnnConfig.MaxEpochs = 100
+	}
+	if rnnConfig.BatchSize == 0 {
+		rnnConfig.BatchSize = 32
+	}
+
+	// Run RNN vs LSTM comparison
+	comparison, err := runner.CompareRNNvsLSTM(rnnConfig)
+	if err != nil {
+		return fmt.Errorf("RNN vs LSTM comparison failed: %w", err)
+	}
+
+	// Display comparison results
+	cmd.displayRNNComparison(comparison)
+
+	// Save results if output path specified
+	if cfg.OutputPath != "" {
+		return cmd.saveRNNComparison(comparison, cfg.OutputPath)
+	}
+
+	return nil
+}
+
+// displayRNNReport shows RNN/LSTM performance report
+func (cmd *BenchmarkCommand) displayRNNReport(report benchmark.RNNPerformanceReport) {
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "\n📊 %s Performance Report:", strings.ToUpper(report.ModelType))
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "─────────────────────────────────────")
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "Scalability Score: %.3f", report.ScalabilityScore)
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "Gradient Stability: %.4f", report.GradientStability)
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "Max Sequence Length: %d", report.MaxSequenceLength)
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "Memory Scaling Rate: %.3f", report.MemoryScalingRate)
+
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "\n📏 Per-Sequence-Length Metrics:")
+	for _, metric := range report.SequenceMetrics {
+		cmd.outputWriter.WriteMessage(output.LogLevelInfo,
+			"Length %d: Forward=%.2fms, Memory=%s, Gradient=%.4f, Accuracy=%.1f%%",
+			metric.SequenceLength,
+			float64(metric.ForwardTime.Nanoseconds())/1e6,
+			benchmark.FormatMemory(metric.MemoryUsage),
+			metric.GradientNorm,
+			metric.FinalAccuracy*100)
+	}
+}
+
+// displayRNNComparison shows RNN vs LSTM comparison results
+func (cmd *BenchmarkCommand) displayRNNComparison(comparison benchmark.RNNComparison) {
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "\n⚔️ RNN vs LSTM Comparison:")
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "─────────────────────────────────────")
+
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "🔴 RNN: Scalability=%.3f, Stability=%.4f, MaxLen=%d",
+		comparison.RNNReport.ScalabilityScore,
+		comparison.RNNReport.GradientStability,
+		comparison.RNNReport.MaxSequenceLength)
+
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "🔵 LSTM: Scalability=%.3f, Stability=%.4f, MaxLen=%d",
+		comparison.LSTMReport.ScalabilityScore,
+		comparison.LSTMReport.GradientStability,
+		comparison.LSTMReport.MaxSequenceLength)
+
+	if len(comparison.Improvements) > 0 {
+		cmd.outputWriter.WriteMessage(output.LogLevelInfo, "\n✅ LSTM Advantages:")
+		for metric, improvement := range comparison.Improvements {
+			cmd.outputWriter.WriteMessage(output.LogLevelInfo, "  • %s: +%.2f%%", metric, improvement)
+		}
+	}
+
+	if len(comparison.TradeOffs) > 0 {
+		cmd.outputWriter.WriteMessage(output.LogLevelInfo, "\n⚖️ RNN Advantages:")
+		for metric, advantage := range comparison.TradeOffs {
+			cmd.outputWriter.WriteMessage(output.LogLevelInfo, "  • %s: +%.2f%%", metric, advantage)
+		}
+	}
+
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "\n💡 Recommendation: %s", comparison.Recommendation)
+}
+
+// saveRNNReport saves RNN/LSTM performance report to a JSON file
+func (cmd *BenchmarkCommand) saveRNNReport(report benchmark.RNNPerformanceReport, outputPath string) error {
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal RNN report: %w", err)
+	}
+
+	err = os.WriteFile(outputPath, data, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to write RNN report file: %w", err)
+	}
+
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "📄 RNN report saved to: %s", outputPath)
+	return nil
+}
+
+// saveRNNComparison saves RNN vs LSTM comparison to a JSON file
+func (cmd *BenchmarkCommand) saveRNNComparison(comparison benchmark.RNNComparison, outputPath string) error {
+	data, err := json.MarshalIndent(comparison, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal RNN comparison: %w", err)
+	}
+
+	err = os.WriteFile(outputPath, data, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to write RNN comparison file: %w", err)
+	}
+
+	cmd.outputWriter.WriteMessage(output.LogLevelInfo, "📄 RNN comparison saved to: %s", outputPath)
 	return nil
 }
