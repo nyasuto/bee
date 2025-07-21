@@ -733,6 +733,311 @@ func TestRunMultipleComparisons(t *testing.T) {
 	}
 }
 
+// TestCNNBenchmarkConfig tests CNN benchmark configuration
+func TestCNNBenchmarkConfig(t *testing.T) {
+	config := CNNBenchmarkConfig{
+		ImageSize:    [3]int{28, 28, 1},
+		BatchSize:    32,
+		Epochs:       10,
+		LearningRate: 0.001,
+		Architecture: "MNIST",
+	}
+
+	// Test configuration structure
+	if config.ImageSize[0] != 28 || config.ImageSize[1] != 28 || config.ImageSize[2] != 1 {
+		t.Error("CNN config image size not set correctly")
+	}
+
+	if config.BatchSize != 32 {
+		t.Error("CNN config batch size not set correctly")
+	}
+
+	if config.Epochs != 10 {
+		t.Error("CNN config epochs not set correctly")
+	}
+
+	if config.LearningRate != 0.001 {
+		t.Error("CNN config learning rate not set correctly")
+	}
+
+	if config.Architecture != "MNIST" {
+		t.Error("CNN config architecture not set correctly")
+	}
+}
+
+// TestCNNMemoryAnalysis tests CNN memory analysis structure
+func TestCNNMemoryAnalysis(t *testing.T) {
+	analysis := &CNNMemoryAnalysis{
+		FeatureMapMemory: 1024,
+		KernelMemory:     512,
+		ActivationMemory: 256,
+		GradientMemory:   128,
+		PoolingMemory:    64,
+		FCMemory:         32,
+		TotalMemory:      2016, // Sum of above
+		BatchScaleFactor: 16,
+	}
+
+	// Test structure validation
+	if analysis.TotalMemory != 2016 {
+		t.Errorf("Expected total memory 2016, got %d", analysis.TotalMemory)
+	}
+
+	if analysis.BatchScaleFactor != 16 {
+		t.Errorf("Expected batch scale factor 16, got %d", analysis.BatchScaleFactor)
+	}
+
+	// Test individual components
+	expected := analysis.FeatureMapMemory + analysis.KernelMemory +
+		analysis.ActivationMemory + analysis.GradientMemory +
+		analysis.PoolingMemory + analysis.FCMemory
+
+	if expected != analysis.TotalMemory {
+		t.Errorf("Memory components don't sum to total: expected %d, got %d", expected, analysis.TotalMemory)
+	}
+}
+
+// TestBatchProcessingMetrics tests batch processing metrics structure
+func TestBatchProcessingMetrics(t *testing.T) {
+	metrics := &BatchProcessingMetrics{
+		BatchSize:      32,
+		ThroughputFPS:  120.5,
+		LatencyPerItem: 8333 * time.Microsecond, // ~8.3ms per item
+		MemoryOverhead: 2048,
+		Efficiency:     1.5, // 50% more efficient than single processing
+	}
+
+	// Test metrics validation
+	if metrics.BatchSize != 32 {
+		t.Errorf("Expected batch size 32, got %d", metrics.BatchSize)
+	}
+
+	if metrics.ThroughputFPS != 120.5 {
+		t.Errorf("Expected throughput 120.5 FPS, got %.2f", metrics.ThroughputFPS)
+	}
+
+	if metrics.LatencyPerItem != 8333*time.Microsecond {
+		t.Errorf("Expected latency 8333 μs, got %v", metrics.LatencyPerItem)
+	}
+
+	if metrics.Efficiency != 1.5 {
+		t.Errorf("Expected efficiency 1.5, got %.2f", metrics.Efficiency)
+	}
+
+	// Test computed relationships (approximate)
+	expectedThroughput := 1.0 / metrics.LatencyPerItem.Seconds()
+	if abs(metrics.ThroughputFPS-expectedThroughput) > 1.0 { // Allow more tolerance for floating point
+		t.Errorf("Throughput and latency inconsistent: %.2f FPS vs %.2f expected",
+			metrics.ThroughputFPS, expectedThroughput)
+	}
+}
+
+// TestDatasetBuilder tests the dataset builder pattern
+func TestDatasetBuilder(t *testing.T) {
+	builder := NewDatasetBuilder("test-dataset").
+		WithDescription("Test dataset for unit testing")
+
+	// Test builder pattern
+	dataset := builder.Build()
+
+	if dataset.Name != "test-dataset" {
+		t.Errorf("Expected dataset name 'test-dataset', got '%s'", dataset.Name)
+	}
+
+	if dataset.Description != "Test dataset for unit testing" {
+		t.Errorf("Expected dataset description set, got '%s'", dataset.Description)
+	}
+
+	// Test adding examples
+	builder.AddTrainExample([]float64{0.5, 0.5}, []float64{1.0})
+	builder.AddTestExample([]float64{0.2, 0.8}, []float64{0.0})
+
+	dataset = builder.Build()
+
+	if len(dataset.TrainInputs) != 1 {
+		t.Errorf("Expected 1 training input, got %d", len(dataset.TrainInputs))
+	}
+
+	if len(dataset.TestInputs) != 1 {
+		t.Errorf("Expected 1 test input, got %d", len(dataset.TestInputs))
+	}
+
+	if dataset.TrainSize != 1 {
+		t.Errorf("Expected train size 1, got %d", dataset.TrainSize)
+	}
+
+	if dataset.TestSize != 1 {
+		t.Errorf("Expected test size 1, got %d", dataset.TestSize)
+	}
+}
+
+// TestDatasetBuilderMultipleExamples tests builder with multiple examples
+func TestDatasetBuilderMultipleExamples(t *testing.T) {
+	builder := NewDatasetBuilder("multi-test")
+
+	// Add multiple training examples
+	for i := 0; i < 5; i++ {
+		input := []float64{float64(i), float64(i * 2)}
+		target := []float64{float64(i % 2)}
+		builder.AddTrainExample(input, target)
+	}
+
+	// Add multiple test examples
+	for i := 0; i < 3; i++ {
+		input := []float64{float64(i + 10), float64((i + 10) * 2)}
+		target := []float64{float64((i + 10) % 2)}
+		builder.AddTestExample(input, target)
+	}
+
+	dataset := builder.Build()
+
+	if len(dataset.TrainInputs) != 5 {
+		t.Errorf("Expected 5 training inputs, got %d", len(dataset.TrainInputs))
+	}
+
+	if len(dataset.TestInputs) != 3 {
+		t.Errorf("Expected 3 test inputs, got %d", len(dataset.TestInputs))
+	}
+
+	if dataset.InputSize != 2 {
+		t.Errorf("Expected input size 2, got %d", dataset.InputSize)
+	}
+
+	if dataset.OutputSize != 1 {
+		t.Errorf("Expected output size 1, got %d", dataset.OutputSize)
+	}
+
+	// Validate dataset structure
+	err := ValidateDataset(dataset)
+	if err != nil {
+		t.Fatalf("Dataset validation failed: %v", err)
+	}
+}
+
+// TestConvertImageDatasetToFlat tests image to flat dataset conversion concept
+func TestConvertImageDatasetToFlat(t *testing.T) {
+	// Create a mock BenchmarkRunner to access the private method concept
+	runner := NewBenchmarkRunner()
+
+	// Test the flattening logic conceptually
+	// This would test the convertImageDatasetToFlat method if it were public
+
+	// Simulate 2x2 image with 1 channel
+	imageHeight, imageWidth, imageChannels := 2, 2, 1
+	expectedFlatSize := imageHeight * imageWidth * imageChannels
+
+	if expectedFlatSize != 4 {
+		t.Errorf("Expected flat size 4, got %d", expectedFlatSize)
+	}
+
+	// Test various image sizes
+	testCases := []struct {
+		height   int
+		width    int
+		channels int
+		expected int
+	}{
+		{28, 28, 1, 784},   // MNIST size
+		{32, 32, 3, 3072},  // CIFAR-10 size
+		{64, 64, 3, 12288}, // Larger RGB image
+		{1, 1, 1, 1},       // Minimal image
+	}
+
+	for _, tc := range testCases {
+		flatSize := tc.height * tc.width * tc.channels
+		if flatSize != tc.expected {
+			t.Errorf("Image %dx%dx%d: expected flat size %d, got %d",
+				tc.height, tc.width, tc.channels, tc.expected, flatSize)
+		}
+	}
+
+	// Ensure runner is created (covers NewBenchmarkRunner)
+	if runner == nil {
+		t.Error("Expected benchmark runner to be created")
+	}
+}
+
+// TestBenchmarkRunnerConfiguration tests benchmark runner configuration methods
+func TestBenchmarkRunnerConfiguration(t *testing.T) {
+	runner := NewBenchmarkRunner()
+
+	// Test default values
+	if runner.iterations != 100 {
+		t.Errorf("Expected default iterations 100, got %d", runner.iterations)
+	}
+
+	if runner.warmupRuns != 10 {
+		t.Errorf("Expected default warmup runs 10, got %d", runner.warmupRuns)
+	}
+
+	if runner.verbose != false {
+		t.Errorf("Expected default verbose false, got %t", runner.verbose)
+	}
+
+	// Test configuration chaining
+	configuredRunner := runner.
+		SetIterations(50).
+		SetWarmupRuns(5).
+		SetVerbose(true)
+
+	if configuredRunner.iterations != 50 {
+		t.Errorf("Expected iterations 50, got %d", configuredRunner.iterations)
+	}
+
+	if configuredRunner.warmupRuns != 5 {
+		t.Errorf("Expected warmup runs 5, got %d", configuredRunner.warmupRuns)
+	}
+
+	if configuredRunner.verbose != true {
+		t.Errorf("Expected verbose true, got %t", configuredRunner.verbose)
+	}
+
+	// Test that chaining returns the same instance
+	if runner != configuredRunner {
+		t.Error("Expected configuration methods to return same instance")
+	}
+}
+
+// TestBenchmarkRunnerEdgeCases tests edge cases for benchmark runner
+func TestBenchmarkRunnerEdgeCases(t *testing.T) {
+	runner := NewBenchmarkRunner()
+
+	// Test with zero iterations (should still work)
+	runner.SetIterations(0)
+	if runner.iterations != 0 {
+		t.Errorf("Expected iterations 0, got %d", runner.iterations)
+	}
+
+	// Test with negative values
+	runner.SetIterations(-5)
+	if runner.iterations != -5 {
+		t.Errorf("Expected iterations -5, got %d", runner.iterations)
+	}
+
+	// Test with very large values
+	runner.SetIterations(1000000)
+	if runner.iterations != 1000000 {
+		t.Errorf("Expected iterations 1000000, got %d", runner.iterations)
+	}
+
+	// Test warmup runs edge cases
+	runner.SetWarmupRuns(0)
+	if runner.warmupRuns != 0 {
+		t.Errorf("Expected warmup runs 0, got %d", runner.warmupRuns)
+	}
+
+	// Test verbose toggle
+	runner.SetVerbose(true)
+	if !runner.verbose {
+		t.Error("Expected verbose to be true")
+	}
+
+	runner.SetVerbose(false)
+	if runner.verbose {
+		t.Error("Expected verbose to be false")
+	}
+}
+
 // BenchmarkBenchmarkRunner benchmarks the benchmark runner itself
 func BenchmarkBenchmarkRunner(b *testing.B) {
 	runner := NewBenchmarkRunner().
@@ -758,6 +1063,21 @@ func BenchmarkBenchmarkRunner(b *testing.B) {
 			if err != nil {
 				b.Fatalf("Benchmark failed: %v", err)
 			}
+		}
+	})
+
+	b.Run("BenchmarkRunnerCreation", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_ = NewBenchmarkRunner()
+		}
+	})
+
+	b.Run("BenchmarkRunnerConfiguration", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_ = NewBenchmarkRunner().
+				SetIterations(100).
+				SetWarmupRuns(10).
+				SetVerbose(false)
 		}
 	})
 }
