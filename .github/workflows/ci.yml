@@ -35,7 +35,7 @@ jobs:
             ${{ runner.os }}-quality-
 
       - name: 🔍 Lint & Security check
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           args: --timeout=5m --verbose
